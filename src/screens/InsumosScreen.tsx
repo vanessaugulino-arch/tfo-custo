@@ -111,6 +111,31 @@ export function InsumosScreen() {
     regime === "simples_nacional" ? precoUnitarioBruto : precoUnitarioBruto * (1 - aliquotaNum / 100);
   const unidadePrecoLabel = unidadeCompra === "peca" ? "peça" : "metro";
 
+  function dicaQuantidadeComprada() {
+    if (unidadeCompra === "peca") {
+      const exemploPack = packNum > 0 ? packNum : 50;
+      return (
+        <>
+          Aqui é quantos <strong>packs</strong> você comprou, não o total de peças. Pack de {exemploPack} peças e você
+          digita "1" → entram {exemploPack} peças no estoque. Digitou "{exemploPack}" → o sistema multiplica {exemploPack} ×{" "}
+          {exemploPack} = {formatNumber(exemploPack * exemploPack)} peças.
+        </>
+      );
+    }
+    if (unidadeCompra === "rolo") {
+      return (
+        <>
+          Aqui é quantos <strong>rolos</strong> você comprou. Digitou "2" → o sistema entende 2 rolos. A metragem de cada
+          rolo entra no campo de rendimento, logo abaixo.
+        </>
+      );
+    }
+    if (unidadeCompra === "peso_kg") {
+      return "Peso total do lote em quilos, direto da balança — não precisa contar rolos ou embalagens.";
+    }
+    return "Metragem linear total já comprada deste lote.";
+  }
+
   function resetForm() {
     setPackQuantidade("");
     setUnidadeCompra("metro");
@@ -228,7 +253,10 @@ export function InsumosScreen() {
             <Input type="date" value={dataCompra} onChange={(e) => setDataCompra(e.target.value)} />
           </Field>
 
-          <Field label={`Quantidade comprada${unidadeCompra !== "metro" ? ` (${UNIDADE_COMPRA_SUFIXO[unidadeCompra]})` : " (m)"}`}>
+          <Field
+            label={`Quantidade comprada${unidadeCompra !== "metro" ? ` (${UNIDADE_COMPRA_SUFIXO[unidadeCompra]})` : " (m)"}`}
+            hint={<InfoTooltip>{dicaQuantidadeComprada()}</InfoTooltip>}
+          >
             <Input type="number" min="0" step="any" value={quantidadeComprada} onChange={(e) => setQuantidadeComprada(e.target.value)} placeholder="ex: 100" />
           </Field>
           <Field label="Preço pago (total, R$)">
