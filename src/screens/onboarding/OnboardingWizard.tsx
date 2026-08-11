@@ -1,0 +1,390 @@
+import { useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { usePerfilNegocio, useSalvarPerfilNegocio, type PerfilNegocio } from "@/hooks/useData";
+import { REGIME_LABELS } from "@/lib/format";
+
+const SEGMENTOS: { grupo: string; itens: string[] }[] = [
+  { grupo: "Acessórios e bolsas", itens: ["Acessórios e Bolsas Feminino", "Acessórios e Bolsas Masculino", "Acessórios Infantil"] },
+  { grupo: "Calçados", itens: ["Calçados Femininos", "Calçados Infantis", "Calçados Masculinos"] },
+  { grupo: "Fitness", itens: ["Fitness Feminino", "Fitness Infantil", "Fitness Masculino"] },
+  { grupo: "Jóias, semijóias, bijuterias e óculos", itens: ["Jóias, Semijóias, Bijuterias e óculos"] },
+  { grupo: "Moda praia", itens: ["Moda Praia Feminino", "Moda Praia Infantil", "Moda Praia Masculino"] },
+  { grupo: "Underwear", itens: ["Underwear Feminino", "Underwear Infantil", "Underwear Masculino"] },
+  { grupo: "Vestuário", itens: ["Vestuário Feminino", "Vestuário Infantil", "Vestuário Masculino"] },
+];
+
+const FATURAMENTOS = ["Até R$ 20 mil/mês", "R$ 20 mil – R$ 100 mil/mês", "R$ 100 mil – R$ 500 mil/mês", "Acima de R$ 500 mil/mês"];
+const ESTAGIOS = ["Validando a primeira coleção", "Vendendo com recorrência", "Escalando a produção", "Operação madura"];
+
+const TOTAL_ETAPAS = 5;
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ---------------------------------------------------------------------------
+// Layout compartilhado
+// ---------------------------------------------------------------------------
+
+interface OnboardingLayoutProps {
+  etapaAtual: number;
+  tituloDestaque: string;
+  descricaoDireita?: string;
+  children: ReactNode;
+  painelLateral?: ReactNode;
+  painelTitulo?: string;
+  podeContinuar: boolean;
+  aoContinuar: () => void;
+  proximoTexto?: string;
+  carregando?: boolean;
+  textoBotao?: string;
+}
+
+function OnboardingLayout({
+  etapaAtual,
+  tituloDestaque,
+  descricaoDireita,
+  children,
+  painelLateral,
+  painelTitulo,
+  podeContinuar,
+  aoContinuar,
+  proximoTexto,
+  carregando,
+  textoBotao,
+}: OnboardingLayoutProps) {
+  const { user } = useAuth();
+  const primeiroNome = user?.email ? capitalize(user.email.split("@")[0].split(/[.\-_0-9]/)[0]) : "";
+
+  return (
+    <div className="min-h-screen bg-background px-6 py-10 md:px-16">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex flex-col md:flex-row justify-between gap-6 mb-10">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-serif text-foreground">Olá{primeiroNome ? `, ${primeiroNome}` : ""}.</h1>
+            <h2 className="text-3xl md:text-4xl font-serif italic text-secondary">{tituloDestaque}</h2>
+          </div>
+          {descricaoDireita && <p className="max-w-sm text-sm text-muted-foreground md:text-right">{descricaoDireita}</p>}
+        </div>
+
+        <div className="mb-10">
+          <div className="flex items-center justify-between text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2">
+            <span>Cadastro inicial</span>
+            <span>
+              {String(etapaAtual).padStart(2, "0")} de {String(TOTAL_ETAPAS).padStart(2, "0")}
+            </span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all"
+              style={{ width: `${(etapaAtual / TOTAL_ETAPAS) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_340px] gap-10 items-start">
+          <div className="flex flex-col gap-10 pb-16">{children}</div>
+
+          <div className="md:sticky md:top-10 rounded-xl border border-border bg-card p-6 flex flex-col gap-4">
+            {painelTitulo && <h3 className="font-serif text-lg text-foreground">{painelTitulo}</h3>}
+            {painelLateral}
+            <button
+              type="button"
+              onClick={aoContinuar}
+              disabled={!podeContinuar || carregando}
+              className="w-full rounded-md px-4 py-2.5 text-sm font-medium bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+            >
+              {carregando ? "Salvando..." : (textoBotao ?? "Continuar →")}
+            </button>
+            {proximoTexto && <p className="text-xs text-muted-foreground text-center">{proximoTexto}</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div>
+      <h3 className="text-xl font-serif text-foreground mb-1">{title}</h3>
+      {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+    </div>
+  );
+}
+
+function PillGroup({ options, value, onChange }: { options: string[]; value: string | null; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((op) => (
+        <button
+          key={op}
+          type="button"
+          onClick={() => onChange(op)}
+          className={`rounded-lg px-4 py-3 text-sm text-left border transition-colors ${
+            value === op ? "bg-accent border-accent text-accent-foreground font-medium" : "bg-card border-border hover:border-secondary"
+          }`}
+        >
+          {op}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RadioCard({
+  title,
+  description,
+  selected,
+  onSelect,
+}: {
+  title: string;
+  description: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`w-full text-left rounded-lg border p-4 transition-colors ${
+        selected ? "bg-accent border-accent" : "bg-card border-border hover:border-secondary"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-sm text-foreground">{title}</span>
+        <span
+          className={`h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center ${selected ? "border-primary" : "border-muted-foreground"}`}
+        >
+          {selected && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Wizard
+// ---------------------------------------------------------------------------
+
+type Rascunho = Partial<PerfilNegocio>;
+
+export function OnboardingWizard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { data: perfilExistente } = usePerfilNegocio(user?.id);
+  const salvar = useSalvarPerfilNegocio();
+
+  const [etapa, setEtapa] = useState(1);
+  const [rascunho, setRascunho] = useState<Rascunho>(() => perfilExistente ?? {});
+
+  function atualizar<K extends keyof Rascunho>(campo: K, valor: Rascunho[K]) {
+    setRascunho((prev) => ({ ...prev, [campo]: valor }));
+  }
+
+  async function salvarEAvancar(campos: Rascunho, proximaEtapa: number | null) {
+    if (!user) return;
+    await salvar.mutateAsync({ userId: user.id, ...campos });
+    if (proximaEtapa) setEtapa(proximaEtapa);
+    else navigate("/insumos");
+  }
+
+  if (etapa === 1) {
+    return (
+      <OnboardingLayout
+        etapaAtual={1}
+        tituloDestaque="Conta da sua marca."
+        descricaoDireita="Esses dados orientam todas as leituras da plataforma: benchmark de segmento, faixa esperada de margem e mix de coleção."
+        painelTitulo="Canal principal"
+        painelLateral={
+          <div className="flex flex-col gap-3">
+            <RadioCard
+              title="Varejo / D2C"
+              description="Venda direta ao consumidor final."
+              selected={rascunho.canal_principal === "varejo_d2c"}
+              onSelect={() => atualizar("canal_principal", "varejo_d2c")}
+            />
+            <RadioCard
+              title="Atacado / B2B"
+              description="Multimarcas, revenda, grandes pedidos."
+              selected={rascunho.canal_principal === "atacado_b2b"}
+              onSelect={() => atualizar("canal_principal", "atacado_b2b")}
+            />
+          </div>
+        }
+        podeContinuar={!!rascunho.nome_marca?.trim() && !!rascunho.segmento && !!rascunho.canal_principal}
+        aoContinuar={() => salvarEAvancar(rascunho, 2)}
+        proximoTexto="Próximo: faturamento, estágio e modelo"
+        carregando={salvar.isPending}
+      >
+        <div>
+          <SectionTitle title="Como sua marca se chama?" subtitle="Esse nome aparece no topo do painel e nos relatórios." />
+          <input
+            value={rascunho.nome_marca ?? ""}
+            onChange={(e) => atualizar("nome_marca", e.target.value)}
+            placeholder="Ex: Atelier Carmen, Studio 14, Veridiana"
+            className="mt-4 w-full rounded-md border border-border bg-card px-4 py-3 text-sm outline-none focus:border-secondary focus:ring-1 focus:ring-secondary"
+          />
+        </div>
+
+        <div>
+          <SectionTitle title="Qual é o segmento principal?" />
+          <div className="mt-4 flex flex-col gap-5">
+            {SEGMENTOS.map((s) => (
+              <div key={s.grupo}>
+                <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2 pb-1 border-b border-border">
+                  {s.grupo}
+                </div>
+                <PillGroup options={s.itens} value={rascunho.segmento ?? null} onChange={(v) => atualizar("segmento", v)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </OnboardingLayout>
+    );
+  }
+
+  if (etapa === 2) {
+    return (
+      <OnboardingLayout
+        etapaAtual={2}
+        tituloDestaque="Sobre o seu negócio."
+        descricaoDireita="Ajuda a calibrar comparações e alertas ao longo da ferramenta."
+        painelTitulo="Modelo de produção"
+        painelLateral={
+          <div className="flex flex-col gap-3">
+            <RadioCard
+              title="Produção própria"
+              description="Fábrica ou ateliê interno."
+              selected={rascunho.modelo_producao === "propria"}
+              onSelect={() => atualizar("modelo_producao", "propria")}
+            />
+            <RadioCard
+              title="Terceirizo a produção"
+              description="Fornecedores fazem corte, costura e acabamento."
+              selected={rascunho.modelo_producao === "terceirizada"}
+              onSelect={() => atualizar("modelo_producao", "terceirizada")}
+            />
+            <RadioCard
+              title="Misto"
+              description="Parte própria, parte terceirizada."
+              selected={rascunho.modelo_producao === "misto"}
+              onSelect={() => atualizar("modelo_producao", "misto")}
+            />
+          </div>
+        }
+        podeContinuar={!!rascunho.faturamento_faixa && !!rascunho.estagio && !!rascunho.modelo_producao}
+        aoContinuar={() => salvarEAvancar(rascunho, 3)}
+        proximoTexto="Próximo: como o TFO Custos funciona"
+        carregando={salvar.isPending}
+      >
+        <div>
+          <SectionTitle title="Qual a faixa de faturamento mensal?" />
+          <div className="mt-4">
+            <PillGroup options={FATURAMENTOS} value={rascunho.faturamento_faixa ?? null} onChange={(v) => atualizar("faturamento_faixa", v)} />
+          </div>
+        </div>
+        <div>
+          <SectionTitle title="Em que estágio a marca está?" />
+          <div className="mt-4">
+            <PillGroup options={ESTAGIOS} value={rascunho.estagio ?? null} onChange={(v) => atualizar("estagio", v)} />
+          </div>
+        </div>
+      </OnboardingLayout>
+    );
+  }
+
+  if (etapa === 3) {
+    const passos = [
+      { n: 1, titulo: "Insumos", texto: "Cadastre fornecedores e materiais — cada compra vira um preço por metro linear, já líquido de imposto." },
+      { n: 2, titulo: "Serviços", texto: "Modelagem, corte, costura... cada fornecedor com seu modelo de cobrança (peça, tempo ou produto)." },
+      { n: 3, titulo: "Produto", texto: "Junte insumos e serviços — o sistema soma tudo e congela o custo unitário no momento em que você salva." },
+      { n: 4, titulo: "Coleções", texto: "Aprove os produtos que vão para produção — isso desconta o estoque previsto automaticamente." },
+    ];
+    return (
+      <OnboardingLayout
+        etapaAtual={3}
+        tituloDestaque="Como o TFO Custos funciona."
+        descricaoDireita="Quatro passos entre o insumo comprado e o custo final da peça."
+        podeContinuar
+        aoContinuar={() => salvarEAvancar({}, 4)}
+        proximoTexto="Próximo: regime tributário padrão"
+        carregando={salvar.isPending}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {passos.map((p) => (
+            <div key={p.n} className="rounded-lg border border-border bg-card p-5">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold mb-3">
+                {p.n}
+              </span>
+              <h4 className="font-serif text-lg text-foreground mb-1">{p.titulo}</h4>
+              <p className="text-sm text-muted-foreground">{p.texto}</p>
+            </div>
+          ))}
+        </div>
+      </OnboardingLayout>
+    );
+  }
+
+  if (etapa === 4) {
+    const opcoes: { valor: string; descricao: string }[] = [
+      { valor: "simples_nacional", descricao: "Sem crédito — o preço pago já é o custo real. Mais comum para micro e pequenas confecções hoje." },
+      { valor: "lucro_presumido_real", descricao: "Já dá para recuperar parte do imposto pago no insumo." },
+      { valor: "iva_dual_2027", descricao: "A partir da reforma tributária, crédito amplo sobre a compra (CBS/IBS)." },
+    ];
+    return (
+      <OnboardingLayout
+        etapaAtual={4}
+        tituloDestaque="Regime tributário padrão."
+        descricaoDireita="Usado como sugestão inicial ao registrar uma compra de insumo — você pode trocar em cada compra."
+        podeContinuar={!!rascunho.regime_tributario_padrao}
+        aoContinuar={() => salvarEAvancar(rascunho, 5)}
+        proximoTexto="Última etapa"
+        carregando={salvar.isPending}
+      >
+        <div>
+          <SectionTitle title="Qual regime melhor descreve sua empresa hoje?" />
+          <div className="mt-4 flex flex-col gap-3 max-w-lg">
+            {opcoes.map((o) => (
+              <RadioCard
+                key={o.valor}
+                title={REGIME_LABELS[o.valor]}
+                description={o.descricao}
+                selected={(rascunho.regime_tributario_padrao ?? "simples_nacional") === o.valor}
+                onSelect={() => atualizar("regime_tributario_padrao", o.valor)}
+              />
+            ))}
+          </div>
+        </div>
+      </OnboardingLayout>
+    );
+  }
+
+  return (
+    <OnboardingLayout
+      etapaAtual={5}
+      tituloDestaque="Pronto para começar."
+      descricaoDireita="Seu perfil fica em Configurações — pode ajustar quando quiser."
+      podeContinuar
+      textoBotao="Ir para Insumos →"
+      aoContinuar={() => salvarEAvancar({ onboarding_concluido: true }, null)}
+      carregando={salvar.isPending}
+    >
+      <div className="rounded-lg border border-border bg-card p-8 max-w-xl">
+        <h3 className="font-serif text-2xl text-foreground mb-3">
+          {rascunho.nome_marca ? `Tudo pronto, ${rascunho.nome_marca}.` : "Tudo pronto."}
+        </h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          O primeiro passo real é cadastrar um insumo — fornecedor, material e o preço que você pagou. A partir daí o sistema já
+          calcula o preço por metro e fica pronto para entrar num produto.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Se quiser importar uma planilha com vários insumos de uma vez, a opção "Importar planilha" está no topo da tela de
+          Insumos.
+        </p>
+      </div>
+    </OnboardingLayout>
+  );
+}

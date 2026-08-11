@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
+import { usePerfilNegocio } from "@/hooks/useData";
 import { LoginScreen } from "@/screens/LoginScreen";
+import { OnboardingWizard } from "@/screens/onboarding/OnboardingWizard";
 import { InsumosScreen } from "@/screens/InsumosScreen";
 import { ServicosScreen } from "@/screens/ServicosScreen";
 import { NovoProdutoScreen } from "@/screens/NovoProdutoScreen";
@@ -10,13 +12,18 @@ import { EstoqueScreen } from "@/screens/EstoqueScreen";
 
 export default function App() {
   const { user, loading } = useAuth();
+  const { data: perfil, isLoading: carregandoPerfil } = usePerfilNegocio(user?.id);
 
-  if (loading) {
+  if (loading || (user && carregandoPerfil)) {
     return <div className="min-h-screen flex items-center justify-center text-muted-foreground text-sm">Carregando...</div>;
   }
 
   if (!user) {
     return <LoginScreen />;
+  }
+
+  if (!perfil?.onboarding_concluido) {
+    return <OnboardingWizard />;
   }
 
   return (

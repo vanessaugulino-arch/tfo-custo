@@ -466,6 +466,51 @@ export type Database = {
         }
         Relationships: []
       }
+      perfil_negocio: {
+        Row: {
+          atualizado_em: string
+          canal_principal: string | null
+          criado_em: string
+          estagio: string | null
+          faturamento_faixa: string | null
+          id: string
+          modelo_producao: string | null
+          nome_marca: string | null
+          onboarding_concluido: boolean
+          regime_tributario_padrao: string | null
+          segmento: string | null
+          user_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          canal_principal?: string | null
+          criado_em?: string
+          estagio?: string | null
+          faturamento_faixa?: string | null
+          id?: string
+          modelo_producao?: string | null
+          nome_marca?: string | null
+          onboarding_concluido?: boolean
+          regime_tributario_padrao?: string | null
+          segmento?: string | null
+          user_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          canal_principal?: string | null
+          criado_em?: string
+          estagio?: string | null
+          faturamento_faixa?: string | null
+          id?: string
+          modelo_producao?: string | null
+          nome_marca?: string | null
+          onboarding_concluido?: boolean
+          regime_tributario_padrao?: string | null
+          segmento?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       compras_insumo_precos: {

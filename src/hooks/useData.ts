@@ -5,6 +5,43 @@ import type { Database } from "@/lib/database.types";
 type Tables = Database["public"]["Tables"];
 
 // ---------------------------------------------------------------------------
+// Perfil de negócio (onboarding)
+// ---------------------------------------------------------------------------
+
+export type PerfilNegocio = Tables["perfil_negocio"]["Row"];
+
+export function usePerfilNegocio(userId: string | undefined) {
+  return useQuery({
+    queryKey: ["perfil_negocio", userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<PerfilNegocio | null> => {
+      const { data, error } = await supabase.from("perfil_negocio").select("*").eq("user_id", userId!).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useSalvarPerfilNegocio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { userId: string } & Partial<Tables["perfil_negocio"]["Insert"]>) => {
+      const { userId, ...resto } = input;
+      const { data, error } = await supabase
+        .from("perfil_negocio")
+        .upsert({ user_id: userId, ...resto }, { onConflict: "user_id" })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["perfil_negocio", variables.userId] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Catálogos simples (fornecedores, materiais, categorias, serviços)
 // ---------------------------------------------------------------------------
 

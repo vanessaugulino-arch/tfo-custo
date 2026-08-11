@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Combobox } from "@/components/Combobox";
 import { ImportModal, type ResultadoImport } from "@/components/ImportModal";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
+import { useAuth } from "@/hooks/useAuth";
 import {
   useComprasInsumo,
   useCreateCompraInsumo,
@@ -10,6 +11,7 @@ import {
   useCreateMaterial,
   useFornecedores,
   useMateriais,
+  usePerfilNegocio,
 } from "@/hooks/useData";
 import { findOrCreateFornecedor, findOrCreateMaterial, parseNumeroPtBr } from "@/lib/importHelpers";
 import { MODELO_INSUMOS } from "@/lib/importFields";
@@ -21,6 +23,8 @@ const UNIDADES = Object.entries(UNIDADE_COMPRA_LABELS);
 const UNIDADES_VALIDAS = new Set(["metro", "peso_kg", "peca"]);
 
 export function InsumosScreen() {
+  const { user } = useAuth();
+  const { data: perfil } = usePerfilNegocio(user?.id);
   const { data: fornecedores = [] } = useFornecedores();
   const { data: materiais = [] } = useMateriais();
   const { data: compras = [] } = useComprasInsumo();
@@ -79,9 +83,18 @@ export function InsumosScreen() {
   const [quantidadeComprada, setQuantidadeComprada] = useState("");
   const [precoPago, setPrecoPago] = useState("");
   const [regime, setRegime] = useState("simples_nacional");
+  const [regimeInicializado, setRegimeInicializado] = useState(false);
   const [aliquota, setAliquota] = useState("0");
   const [dataCompra, setDataCompra] = useState(() => new Date().toISOString().slice(0, 10));
   const [erro, setErro] = useState<string | null>(null);
+
+  // Pré-seleciona o regime tributário definido no onboarding, só na primeira carga.
+  useEffect(() => {
+    if (!regimeInicializado && perfil?.regime_tributario_padrao) {
+      setRegime(perfil.regime_tributario_padrao);
+      setRegimeInicializado(true);
+    }
+  }, [perfil, regimeInicializado]);
 
   const packNum = Number(packQuantidade) || 0;
   const qtdNum = Number(quantidadeComprada) || 0;
