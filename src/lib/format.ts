@@ -31,3 +31,15 @@ export const MOVIMENTO_LABELS: Record<string, string> = {
   ajuste_manual: "Ajuste manual",
   ajuste_inventario: "Ajuste de inventário",
 };
+
+export const UNIDADE_COMPRA_LABELS: Record<string, string> = {
+  metro: "Metro",
+  peso_kg: "Peso (kg)",
+  peca: "Peça",
+};
+
+export const UNIDADE_COMPRA_SUFIXO: Record<string, string> = {
+  metro: "m",
+  peso_kg: "kg",
+  peca: "peças",
+};

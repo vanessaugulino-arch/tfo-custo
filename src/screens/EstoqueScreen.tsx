@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { ImportModal, type ResultadoImport } from "@/components/ImportModal";
 import { Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { useAjusteEstoque, useEstoqueAtual, useMovimentosEstoque } from "@/hooks/useData";
@@ -55,6 +56,20 @@ export function EstoqueScreen() {
     return { sucesso, erros };
   }
 
+  function handleExportar() {
+    const linhas = estoque.map((e) => ({
+      Código: e.material.codigo ?? "",
+      Material: e.material.nome,
+      Unidade: e.material.unidade_padrao,
+      "Saldo atual": e.saldo_atual,
+    }));
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Estoque");
+    const data = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `estoque_insumos_${data}.xlsx`);
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between gap-4">
@@ -62,9 +77,14 @@ export function EstoqueScreen() {
           title="Estoque de insumos"
           subtitle="Entradas de compra e saídas por aprovação de produto são automáticas. Use o ajuste para corrigir após produção ou inventário."
         />
-        <Button variant="secondary" onClick={() => setImportAberto(true)}>
-          Importar planilha
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={handleExportar}>
+            Exportar (.xlsx)
+          </Button>
+          <Button variant="secondary" onClick={() => setImportAberto(true)}>
+            Importar planilha
+          </Button>
+        </div>
       </div>
 
       {importAberto && (

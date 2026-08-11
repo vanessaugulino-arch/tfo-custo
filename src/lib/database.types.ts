@@ -61,6 +61,7 @@ export type Database = {
           aliquota_credito_pct: number
           criado_em: string
           data_compra: string
+          fator_metros_por_unidade: number
           fornecedor_id: string
           id: string
           material_id: string
@@ -68,11 +69,13 @@ export type Database = {
           preco_pago: number
           quantidade_comprada: number
           regime_tributario: string
+          unidade_compra: string
         }
         Insert: {
           aliquota_credito_pct?: number
           criado_em?: string
           data_compra?: string
+          fator_metros_por_unidade?: number
           fornecedor_id: string
           id?: string
           material_id: string
@@ -80,11 +83,13 @@ export type Database = {
           preco_pago: number
           quantidade_comprada: number
           regime_tributario?: string
+          unidade_compra?: string
         }
         Update: {
           aliquota_credito_pct?: number
           criado_em?: string
           data_compra?: string
+          fator_metros_por_unidade?: number
           fornecedor_id?: string
           id?: string
           material_id?: string
@@ -92,6 +97,7 @@ export type Database = {
           preco_pago?: number
           quantidade_comprada?: number
           regime_tributario?: string
+          unidade_compra?: string
         }
         Relationships: [
           {
@@ -467,6 +473,7 @@ export type Database = {
           aliquota_credito_pct: number | null
           criado_em: string | null
           data_compra: string | null
+          fator_metros_por_unidade: number | null
           fornecedor_id: string | null
           id: string | null
           material_id: string | null
@@ -475,12 +482,15 @@ export type Database = {
           preco_unitario_bruto: number | null
           preco_unitario_liquido: number | null
           quantidade_comprada: number | null
+          quantidade_convertida: number | null
           regime_tributario: string | null
+          unidade_compra: string | null
         }
         Insert: {
           aliquota_credito_pct?: number | null
           criado_em?: string | null
           data_compra?: string | null
+          fator_metros_por_unidade?: number | null
           fornecedor_id?: string | null
           id?: string | null
           material_id?: string | null
@@ -489,12 +499,15 @@ export type Database = {
           preco_unitario_bruto?: never
           preco_unitario_liquido?: never
           quantidade_comprada?: number | null
+          quantidade_convertida?: never
           regime_tributario?: string | null
+          unidade_compra?: string | null
         }
         Update: {
           aliquota_credito_pct?: number | null
           criado_em?: string | null
           data_compra?: string | null
+          fator_metros_por_unidade?: number | null
           fornecedor_id?: string | null
           id?: string | null
           material_id?: string | null
@@ -503,7 +516,9 @@ export type Database = {
           preco_unitario_bruto?: never
           preco_unitario_liquido?: never
           quantidade_comprada?: number | null
+          quantidade_convertida?: never
           regime_tributario?: string | null
+          unidade_compra?: string | null
         }
         Relationships: [
           {
@@ -614,6 +629,7 @@ export type Database = {
           aliquota_credito_pct: number | null
           criado_em: string | null
           data_compra: string | null
+          fator_metros_por_unidade: number | null
           fornecedor_id: string | null
           id: string | null
           material_id: string | null
@@ -622,7 +638,9 @@ export type Database = {
           preco_unitario_bruto: number | null
           preco_unitario_liquido: number | null
           quantidade_comprada: number | null
+          quantidade_convertida: number | null
           regime_tributario: string | null
+          unidade_compra: string | null
         }
         Relationships: [
           {

@@ -21,12 +21,14 @@ export const MODELO_INSUMOS: ModeloImport = {
     { id: "fornecedor", label: "Fornecedor", tipo: "texto", obrigatorio: true, keywords: ["fornecedor", "supplier"], explicacao: "Nome do fornecedor. Se não existir ainda, é criado automaticamente." },
     { id: "material", label: "Material / insumo", tipo: "texto", obrigatorio: true, keywords: ["material", "insumo", "mp", "matéria", "materia"], explicacao: "Nome do material ou matéria-prima. Se não existir, é criado automaticamente." },
     { id: "pack", label: "Pack", tipo: "numerico", obrigatorio: true, keywords: ["pack", "embalagem", "rolo", "volume"], explicacao: "A cada quantos metros/unidades o fornecedor vende este material." },
-    { id: "quantidade_comprada", label: "Quantidade comprada", tipo: "numerico", obrigatorio: true, keywords: ["quantidade", "qtd", "comprada"], explicacao: "Quantidade total comprada nesta nota/lote." },
+    { id: "quantidade_comprada", label: "Quantidade comprada", tipo: "numerico", obrigatorio: true, keywords: ["quantidade", "qtd", "comprada"], explicacao: "Quantidade total comprada nesta nota/lote, na unidade de compra (metro, kg ou peça)." },
     { id: "preco_pago", label: "Preço pago (R$)", tipo: "monetario", obrigatorio: true, keywords: ["preco", "preço", "valor", "pago", "total"], explicacao: "Valor total pago pelo lote (não o valor unitário)." },
+    { id: "unidade_compra", label: "Unidade de compra", tipo: "texto", obrigatorio: false, keywords: ["unidade", "medida"], explicacao: "metro, peso_kg ou peca. Se ausente, assume metro." },
+    { id: "fator_metros_por_unidade", label: "Metros por unidade", tipo: "numerico", obrigatorio: false, keywords: ["rendimento", "metros por", "fator"], explicacao: "Quantos metros lineares equivalem a 1 kg (ou a 1 peça/rolo). Obrigatório apenas quando a unidade não é metro." },
     { id: "regime_tributario", label: "Regime tributário", tipo: "texto", obrigatorio: false, keywords: ["regime", "tributário", "tributario", "imposto"], explicacao: "simples_nacional, lucro_presumido_real ou iva_dual_2027. Se ausente, assume Simples Nacional." },
     { id: "data_compra", label: "Data da compra", tipo: "data", obrigatorio: false, keywords: ["data", "compra"], explicacao: "Data da compra. Se ausente, usa a data de hoje." },
   ],
-  linhaExemplo: ["Fornecedor XYZ", "Elástico 3cm", "25", "100", "350.00", "simples_nacional", "2026-08-01"],
+  linhaExemplo: ["Fornecedor XYZ", "Elástico 3cm", "25", "100", "350.00", "metro", "1", "simples_nacional", "2026-08-01"],
 };
 
 export const MODELO_SERVICOS: ModeloImport = {

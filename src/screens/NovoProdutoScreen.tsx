@@ -9,6 +9,7 @@ import {
   useCreateCategoria,
   useCreateColecao,
   useCreateProdutoCompleto,
+  useEstoqueAtual,
   useFornecedores,
   useMateriais,
   useServicosFornecedor,
@@ -28,6 +29,7 @@ interface ServicoLinhaUI extends NovaLinhaServicoProduto {
 interface InsumoLinhaUI extends NovaLinhaInsumoProduto {
   key: string;
   label: string;
+  materialId: string;
 }
 
 export function NovoProdutoScreen() {
@@ -37,6 +39,7 @@ export function NovoProdutoScreen() {
   const { data: servicosFornecedor = [] } = useServicosFornecedor();
   const { data: fornecedores = [] } = useFornecedores();
   const { data: materiais = [] } = useMateriais();
+  const { data: estoqueAtual = [] } = useEstoqueAtual();
   const createColecao = useCreateColecao();
   const createCategoria = useCreateCategoria();
   const createProduto = useCreateProdutoCompleto();
@@ -79,6 +82,22 @@ export function NovoProdutoScreen() {
     () => custoTotalProduto(servicosLinhas, insumosLinhas, quantidadeProduzidaNum),
     [servicosLinhas, insumosLinhas, quantidadeProduzidaNum],
   );
+
+  // Necessidade total por material (soma quando o mesmo material aparece em mais de uma linha).
+  const necessidadePorMaterial = useMemo(() => {
+    const mapa = new Map<string, number>();
+    insumosLinhas.forEach((l) => {
+      const necessidade = l.consumoQuantidade * (1 + l.desperdicioPct / 100) * quantidadeProduzidaNum;
+      mapa.set(l.materialId, (mapa.get(l.materialId) ?? 0) + necessidade);
+    });
+    return mapa;
+  }, [insumosLinhas, quantidadeProduzidaNum]);
+
+  function checarEstoque(materialId: string) {
+    const necessario = necessidadePorMaterial.get(materialId) ?? 0;
+    const disponivel = estoqueAtual.find((e) => e.material_id === materialId)?.saldo_atual ?? 0;
+    return { falta: quantidadeProduzidaNum > 0 && necessario > disponivel, necessario, disponivel };
+  }
 
   async function handleCriarColecao() {
     if (!colecaoNome.trim()) return;
@@ -135,6 +154,7 @@ export function NovoProdutoScreen() {
     const linha: InsumoLinhaUI = {
       key: crypto.randomUUID(),
       label: `${material?.nome} — ${fornecedor?.nome}`,
+      materialId: draftMaterialId,
       compraInsumoId: compraVigente.id!,
       consumoQuantidade: consumo,
       desperdicioPct: desperdicio,
@@ -377,7 +397,15 @@ export function NovoProdutoScreen() {
               placeholder="Selecionar fornecedor..."
             />
           </Field>
-          <Field label="Consumo por peça">
+          <Field
+            label="Consumo por peça"
+            hint={
+              <InfoTooltip>
+                Sempre em metros lineares, independente de como o insumo foi comprado (metro, peso ou peça/rolo) — o
+                sistema já converteu o preço para R$/metro na tela de Insumos.
+              </InfoTooltip>
+            }
+          >
             <Input type="number" min="0" step="any" value={draftConsumo} onChange={(e) => setDraftConsumo(e.target.value)} />
           </Field>
           <Field
@@ -414,37 +442,57 @@ export function NovoProdutoScreen() {
               <th className="py-2 pr-4">Desperdício</th>
               <th className="py-2 pr-4">Preço unitário</th>
               <th className="py-2 pr-4">Custo por peça</th>
+              <th className="py-2 pr-4">Estoque</th>
               <th className="py-2 pr-4" />
             </tr>
           </thead>
           <tbody>
-            {insumosLinhas.map((l) => (
-              <tr key={l.key} className="border-b border-border/60">
-                <td className="py-2 pr-4">{l.label}</td>
-                <td className="py-2 pr-4">{formatNumber(l.consumoQuantidade)}</td>
-                <td className="py-2 pr-4">{formatNumber(l.desperdicioPct)}%</td>
-                <td className="py-2 pr-4">{formatBRL(l.precoUnitarioAplicado)}</td>
-                <td className="py-2 pr-4">{formatBRL(custoInsumoPorPeca(l))}</td>
-                <td className="py-2 pr-4">
-                  <button
-                    type="button"
-                    className="text-destructive"
-                    onClick={() => setInsumosLinhas((prev) => prev.filter((x) => x.key !== l.key))}
-                  >
-                    Remover
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {insumosLinhas.map((l) => {
+              const { falta, necessario, disponivel } = checarEstoque(l.materialId);
+              return (
+                <tr key={l.key} className="border-b border-border/60">
+                  <td className="py-2 pr-4">{l.label}</td>
+                  <td className="py-2 pr-4">{formatNumber(l.consumoQuantidade)}</td>
+                  <td className="py-2 pr-4">{formatNumber(l.desperdicioPct)}%</td>
+                  <td className="py-2 pr-4">{formatBRL(l.precoUnitarioAplicado)}</td>
+                  <td className="py-2 pr-4">{formatBRL(custoInsumoPorPeca(l))}</td>
+                  <td className="py-2 pr-4">
+                    {falta ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-xs font-medium">
+                        Faltam {formatNumber(necessario - disponivel)}m
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{formatNumber(disponivel)}m disponível</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">
+                    <button
+                      type="button"
+                      className="text-destructive"
+                      onClick={() => setInsumosLinhas((prev) => prev.filter((x) => x.key !== l.key))}
+                    >
+                      Remover
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
             {insumosLinhas.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                <td colSpan={7} className="py-4 text-center text-muted-foreground">
                   Nenhum insumo adicionado ainda.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        {insumosLinhas.some((l) => checarEstoque(l.materialId).falta) && (
+          <div className="mt-4 rounded-md bg-destructive/10 text-destructive px-4 py-3 text-sm">
+            Estoque insuficiente para a quantidade produzida em pelo menos um insumo. Você pode comprar mais do mesmo
+            fornecedor, mas lotes diferentes costumam ter variação de cor/tonalidade — vale confirmar antes de
+            aprovar este produto.
+          </div>
+        )}
       </Card>
 
       <Card className="sticky bottom-4 flex items-center justify-between shadow-lg">

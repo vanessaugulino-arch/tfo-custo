@@ -185,6 +185,7 @@ export type CompraInsumoCompleta = Tables["compras_insumo"]["Row"] & {
   material: Tables["materiais"]["Row"];
   preco_unitario_bruto: number;
   preco_unitario_liquido: number;
+  quantidade_convertida: number;
 };
 
 export function useComprasInsumo() {
@@ -211,6 +212,8 @@ interface NovaCompraInsumo {
   regimeTributario: string;
   aliquotaCreditoPct: number;
   dataCompra: string;
+  unidadeCompra: string;
+  fatorMetrosPorUnidade: number;
 }
 
 export function useCreateCompraInsumo() {
@@ -228,6 +231,8 @@ export function useCreateCompraInsumo() {
           regime_tributario: input.regimeTributario as any,
           aliquota_credito_pct: input.aliquotaCreditoPct,
           data_compra: input.dataCompra,
+          unidade_compra: input.unidadeCompra as any,
+          fator_metros_por_unidade: input.fatorMetrosPorUnidade,
         })
         .select()
         .single();
