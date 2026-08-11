@@ -35,11 +35,13 @@ export const MOVIMENTO_LABELS: Record<string, string> = {
 export const UNIDADE_COMPRA_LABELS: Record<string, string> = {
   metro: "Metro",
   peso_kg: "Peso (kg)",
+  rolo: "Rolo",
   peca: "Peça",
 };
 
 export const UNIDADE_COMPRA_SUFIXO: Record<string, string> = {
   metro: "m",
   peso_kg: "kg",
-  peca: "peças",
+  rolo: "rolo(s)",
+  peca: "pack(s)",
 };

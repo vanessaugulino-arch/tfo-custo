@@ -469,7 +469,7 @@ export type Database = {
       perfil_negocio: {
         Row: {
           atualizado_em: string
-          canal_principal: string | null
+          canal_principal: string[]
           criado_em: string
           estagio: string | null
           faturamento_faixa: string | null
@@ -478,12 +478,12 @@ export type Database = {
           nome_marca: string | null
           onboarding_concluido: boolean
           regime_tributario_padrao: string | null
-          segmento: string | null
+          segmento: string[]
           user_id: string
         }
         Insert: {
           atualizado_em?: string
-          canal_principal?: string | null
+          canal_principal?: string[]
           criado_em?: string
           estagio?: string | null
           faturamento_faixa?: string | null
@@ -492,12 +492,12 @@ export type Database = {
           nome_marca?: string | null
           onboarding_concluido?: boolean
           regime_tributario_padrao?: string | null
-          segmento?: string | null
+          segmento?: string[]
           user_id: string
         }
         Update: {
           atualizado_em?: string
-          canal_principal?: string | null
+          canal_principal?: string[]
           criado_em?: string
           estagio?: string | null
           faturamento_faixa?: string | null
@@ -506,7 +506,7 @@ export type Database = {
           nome_marca?: string | null
           onboarding_concluido?: boolean
           regime_tributario_padrao?: string | null
-          segmento?: string | null
+          segmento?: string[]
           user_id?: string
         }
         Relationships: []

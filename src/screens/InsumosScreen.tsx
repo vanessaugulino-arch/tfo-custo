@@ -20,7 +20,8 @@ import { formatBRL, formatDate, formatNumber, REGIME_LABELS, UNIDADE_COMPRA_LABE
 const REGIMES = Object.entries(REGIME_LABELS);
 const REGIMES_VALIDOS = new Set(["simples_nacional", "lucro_presumido_real", "iva_dual_2027"]);
 const UNIDADES = Object.entries(UNIDADE_COMPRA_LABELS);
-const UNIDADES_VALIDAS = new Set(["metro", "peso_kg", "peca"]);
+const UNIDADES_VALIDAS = new Set(["metro", "peso_kg", "rolo", "peca"]);
+const UNIDADES_COM_RENDIMENTO = new Set(["peso_kg", "rolo"]);
 
 export function InsumosScreen() {
   const { user } = useAuth();
@@ -47,9 +48,10 @@ export function InsumosScreen() {
 
         const unidade = row.unidade_compra?.trim().toLowerCase() || "metro";
         const unidadeValida = UNIDADES_VALIDAS.has(unidade) ? unidade : "metro";
-        const fator = unidadeValida === "metro" ? 1 : parseNumeroPtBr(row.fator_metros_por_unidade);
-        if (unidadeValida !== "metro" && !(fator > 0)) {
-          throw new Error("informe quantos metros equivalem a 1 " + (unidadeValida === "peso_kg" ? "kg" : "peça"));
+        const precisaRendimento = UNIDADES_COM_RENDIMENTO.has(unidadeValida);
+        const fator = precisaRendimento ? parseNumeroPtBr(row.fator_metros_por_unidade) : 1;
+        if (precisaRendimento && !(fator > 0)) {
+          throw new Error("informe quantos metros equivalem a 1 " + (unidadeValida === "peso_kg" ? "kg" : "rolo"));
         }
 
         const fornecedorId = await findOrCreateFornecedor(row.fornecedor);
@@ -65,7 +67,7 @@ export function InsumosScreen() {
           aliquotaCreditoPct: 0,
           dataCompra: row.data_compra?.trim() || new Date().toISOString().slice(0, 10),
           unidadeCompra: unidadeValida,
-          fatorMetrosPorUnidade: unidadeValida === "metro" ? 1 : fator,
+          fatorMetrosPorUnidade: fator,
         });
         sucesso++;
       } catch (err) {
@@ -78,7 +80,7 @@ export function InsumosScreen() {
   const [fornecedorId, setFornecedorId] = useState<string | null>(null);
   const [materialId, setMaterialId] = useState<string | null>(null);
   const [packQuantidade, setPackQuantidade] = useState("");
-  const [unidadeCompra, setUnidadeCompra] = useState<"metro" | "peso_kg" | "peca">("metro");
+  const [unidadeCompra, setUnidadeCompra] = useState<"metro" | "peso_kg" | "rolo" | "peca">("metro");
   const [fatorMetros, setFatorMetros] = useState("");
   const [quantidadeComprada, setQuantidadeComprada] = useState("");
   const [precoPago, setPrecoPago] = useState("");
@@ -99,8 +101,10 @@ export function InsumosScreen() {
   const packNum = Number(packQuantidade) || 0;
   const qtdNum = Number(quantidadeComprada) || 0;
   const precoNum = Number(precoPago) || 0;
-  const fatorNum = unidadeCompra === "metro" ? 1 : Number(fatorMetros) || 0;
-  const quantidadeConvertida = qtdNum * fatorNum;
+  const precisaRendimento = UNIDADES_COM_RENDIMENTO.has(unidadeCompra);
+  const fatorNum = precisaRendimento ? Number(fatorMetros) || 0 : 1;
+  // Peça não converte para metros: o pack informa quantas peças tem cada embalagem comprada.
+  const quantidadeConvertida = unidadeCompra === "peca" ? qtdNum * packNum : qtdNum * fatorNum;
   const precoUnitarioBruto = quantidadeConvertida > 0 ? precoNum / quantidadeConvertida : 0;
   const aliquotaNum = Number(aliquota) || 0;
   const precoUnitarioLiquido =
@@ -127,11 +131,9 @@ export function InsumosScreen() {
       setErro("Verifique o pack, a quantidade comprada e o preço pago.");
       return;
     }
-    if (unidadeCompra !== "metro" && fatorNum <= 0) {
+    if (precisaRendimento && fatorNum <= 0) {
       setErro(
-        unidadeCompra === "peso_kg"
-          ? "Informe quantos metros equivalem a 1 kg (rendimento)."
-          : "Informe a metragem linear de cada peça/rolo.",
+        unidadeCompra === "peso_kg" ? "Informe quantos metros equivalem a 1 kg (rendimento)." : "Informe a metragem linear de cada rolo.",
       );
       return;
     }
@@ -203,9 +205,13 @@ export function InsumosScreen() {
               label="Unidade de compra"
               hint={
                 <InfoTooltip>
-                  Como este material é comprado: por metro (tecido plano cortado do rolo), por peso (malhas — o
-                  rendimento em metros por kg depende da gramatura) ou por peça (aviamentos contados por unidade, ou
-                  um rolo/peça fechada de metragem conhecida).
+                  <strong>Metro:</strong> tecido plano cortado do rolo.
+                  <br />
+                  <strong>Peso:</strong> malhas — o rendimento em metros por kg depende da gramatura.
+                  <br />
+                  <strong>Rolo:</strong> rolo/peça fechada com metragem linear conhecida.
+                  <br />
+                  <strong>Peça:</strong> aviamentos contados por unidade (zíper, botão) — não converte para metros.
                 </InfoTooltip>
               }
             >
@@ -229,19 +235,28 @@ export function InsumosScreen() {
             <Input type="number" min="0" step="any" value={precoPago} onChange={(e) => setPrecoPago(e.target.value)} placeholder="ex: 350.00" />
           </Field>
 
-          {unidadeCompra !== "metro" && (
+          {precisaRendimento && (
             <Field
-              label={unidadeCompra === "peso_kg" ? "Rendimento (metros por kg)" : "Metros lineares por peça/rolo"}
+              label={unidadeCompra === "peso_kg" ? "Rendimento (metros por kg)" : "Metros lineares por rolo"}
               hint={
                 <InfoTooltip>
                   {unidadeCompra === "peso_kg"
                     ? "Quantos metros lineares equivalem a 1 kg deste lote. Depende da gramatura e espessura do tecido — pode variar por compra."
-                    : "Quantos metros lineares tem cada peça/rolo fechado deste lote."}
+                    : "Quantos metros lineares tem cada rolo fechado deste lote."}
                 </InfoTooltip>
               }
             >
-              <Input type="number" min="0" step="any" value={fatorMetros} onChange={(e) => setFatorMetros(e.target.value)} placeholder="ex: 3" />
+              <Input type="number" min="0" step="any" value={fatorMetros} onChange={(e) => setFatorMetros(e.target.value)} placeholder="ex: 30" />
             </Field>
+          )}
+          {unidadeCompra === "peca" && (
+            <div className="flex items-end text-sm text-muted-foreground">
+              <InfoTooltip>
+                Peça não converte para metros. O Pack informa quantas peças tem cada embalagem — ex: pack de 100
+                zíperes, comprou 1 pack → 100 peças entram no estoque.
+              </InfoTooltip>
+              <span className="ml-1.5">Sem conversão — o Pack já diz quantas peças por embalagem.</span>
+            </div>
           )}
           <Field
             label="Regime tributário da compra"
@@ -272,7 +287,7 @@ export function InsumosScreen() {
           <div className="col-span-2 flex items-center justify-between rounded-md bg-muted px-4 py-3 text-sm">
             {unidadeCompra !== "metro" && (
               <span>
-                Convertido: <strong>{formatNumber(quantidadeConvertida)} m</strong>
+                Convertido: <strong>{formatNumber(quantidadeConvertida)} {unidadeCompra === "peca" ? "peças" : "m"}</strong>
               </span>
             )}
             <span>
@@ -305,7 +320,7 @@ export function InsumosScreen() {
                 <th className="py-2 pr-4">Pack</th>
                 <th className="py-2 pr-4">Tipo</th>
                 <th className="py-2 pr-4">Qtd. comprada</th>
-                <th className="py-2 pr-4">Qtd. em metros</th>
+                <th className="py-2 pr-4">Qtd. convertida</th>
                 <th className="py-2 pr-4">Preço pago</th>
                 <th className="py-2 pr-4">Unitário bruto</th>
                 <th className="py-2 pr-4">Unitário líquido</th>
@@ -323,7 +338,11 @@ export function InsumosScreen() {
                   <td className="py-2 pr-4">
                     {formatNumber(c.quantidade_comprada)} {UNIDADE_COMPRA_SUFIXO[c.unidade_compra] ?? ""}
                   </td>
-                  <td className="py-2 pr-4">{c.unidade_compra === "metro" ? "—" : `${formatNumber(c.quantidade_convertida)} m`}</td>
+                  <td className="py-2 pr-4">
+                    {c.unidade_compra === "metro"
+                      ? "—"
+                      : `${formatNumber(c.quantidade_convertida)} ${c.unidade_compra === "peca" ? "peças" : "m"}`}
+                  </td>
                   <td className="py-2 pr-4">{formatBRL(c.preco_pago)}</td>
                   <td className="py-2 pr-4">{formatBRL(c.preco_unitario_bruto)}</td>
                   <td className="py-2 pr-4">{formatBRL(c.preco_unitario_liquido)}</td>

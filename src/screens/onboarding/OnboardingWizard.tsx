@@ -133,6 +133,33 @@ function PillGroup({ options, value, onChange }: { options: string[]; value: str
   );
 }
 
+function PillGroupMulti({ options, values, onToggle }: { options: string[]; values: string[]; onToggle: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((op) => {
+        const selecionado = values.includes(op);
+        return (
+          <button
+            key={op}
+            type="button"
+            onClick={() => onToggle(op)}
+            className={`rounded-lg px-4 py-3 text-sm text-left border transition-colors ${
+              selecionado ? "bg-accent border-accent text-accent-foreground font-medium" : "bg-card border-border hover:border-secondary"
+            }`}
+          >
+            {op}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function toggleEmArray(lista: string[] | undefined, valor: string): string[] {
+  const atual = lista ?? [];
+  return atual.includes(valor) ? atual.filter((v) => v !== valor) : [...atual, valor];
+}
+
 function RadioCard({
   title,
   description,
@@ -200,21 +227,22 @@ export function OnboardingWizard() {
         painelTitulo="Canal principal"
         painelLateral={
           <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground -mt-2">Pode marcar mais de um.</p>
             <RadioCard
               title="Varejo / D2C"
               description="Venda direta ao consumidor final."
-              selected={rascunho.canal_principal === "varejo_d2c"}
-              onSelect={() => atualizar("canal_principal", "varejo_d2c")}
+              selected={(rascunho.canal_principal ?? []).includes("varejo_d2c")}
+              onSelect={() => atualizar("canal_principal", toggleEmArray(rascunho.canal_principal, "varejo_d2c"))}
             />
             <RadioCard
               title="Atacado / B2B"
               description="Multimarcas, revenda, grandes pedidos."
-              selected={rascunho.canal_principal === "atacado_b2b"}
-              onSelect={() => atualizar("canal_principal", "atacado_b2b")}
+              selected={(rascunho.canal_principal ?? []).includes("atacado_b2b")}
+              onSelect={() => atualizar("canal_principal", toggleEmArray(rascunho.canal_principal, "atacado_b2b"))}
             />
           </div>
         }
-        podeContinuar={!!rascunho.nome_marca?.trim() && !!rascunho.segmento && !!rascunho.canal_principal}
+        podeContinuar={!!rascunho.nome_marca?.trim() && (rascunho.segmento?.length ?? 0) > 0 && (rascunho.canal_principal?.length ?? 0) > 0}
         aoContinuar={() => salvarEAvancar(rascunho, 2)}
         proximoTexto="Próximo: faturamento, estágio e modelo"
         carregando={salvar.isPending}
@@ -230,14 +258,18 @@ export function OnboardingWizard() {
         </div>
 
         <div>
-          <SectionTitle title="Qual é o segmento principal?" />
+          <SectionTitle title="Qual é o segmento principal?" subtitle="Pode selecionar mais de um — ex: Vestuário Feminino e Calçados Femininos." />
           <div className="mt-4 flex flex-col gap-5">
             {SEGMENTOS.map((s) => (
               <div key={s.grupo}>
                 <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2 pb-1 border-b border-border">
                   {s.grupo}
                 </div>
-                <PillGroup options={s.itens} value={rascunho.segmento ?? null} onChange={(v) => atualizar("segmento", v)} />
+                <PillGroupMulti
+                  options={s.itens}
+                  values={rascunho.segmento ?? []}
+                  onToggle={(v) => atualizar("segmento", toggleEmArray(rascunho.segmento, v))}
+                />
               </div>
             ))}
           </div>
