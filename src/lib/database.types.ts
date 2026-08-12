@@ -772,6 +772,74 @@ export type Database = {
         }
         Relationships: []
       }
+      simulacoes_producao_interna: {
+        Row: {
+          ajuste_pct: number
+          capacidade_base: number
+          capacidade_efetiva: number
+          cargo_temporario_beneficios_mensal: number | null
+          cargo_temporario_duracao_meses: number | null
+          cargo_temporario_encargos_pct: number | null
+          cargo_temporario_id: string | null
+          cargo_temporario_nome: string | null
+          cargo_temporario_salario: number | null
+          criado_em: string
+          custo_por_peca: number
+          folha_base: number
+          folha_efetiva: number
+          id: string
+          motivo_aumento: string | null
+          quantidade_simulada: number
+          user_id: string
+        }
+        Insert: {
+          ajuste_pct?: number
+          capacidade_base: number
+          capacidade_efetiva: number
+          cargo_temporario_beneficios_mensal?: number | null
+          cargo_temporario_duracao_meses?: number | null
+          cargo_temporario_encargos_pct?: number | null
+          cargo_temporario_id?: string | null
+          cargo_temporario_nome?: string | null
+          cargo_temporario_salario?: number | null
+          criado_em?: string
+          custo_por_peca: number
+          folha_base: number
+          folha_efetiva: number
+          id?: string
+          motivo_aumento?: string | null
+          quantidade_simulada: number
+          user_id?: string
+        }
+        Update: {
+          ajuste_pct?: number
+          capacidade_base?: number
+          capacidade_efetiva?: number
+          cargo_temporario_beneficios_mensal?: number | null
+          cargo_temporario_duracao_meses?: number | null
+          cargo_temporario_encargos_pct?: number | null
+          cargo_temporario_id?: string | null
+          cargo_temporario_nome?: string | null
+          cargo_temporario_salario?: number | null
+          criado_em?: string
+          custo_por_peca?: number
+          folha_base?: number
+          folha_efetiva?: number
+          id?: string
+          motivo_aumento?: string | null
+          quantidade_simulada?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "simulacoes_producao_interna_cargo_temporario_id_fkey"
+            columns: ["cargo_temporario_id"]
+            isOneToOne: false
+            referencedRelation: "cargos_producao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       compras_insumo_precos: {

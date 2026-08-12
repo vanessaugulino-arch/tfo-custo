@@ -1,20 +1,38 @@
 import { useState } from "react";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
-import { Button, Card, Field, Input, PageTitle } from "@/components/ui";
+import { Badge, Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  useAprovarSimulacao,
   useCargosProducao,
   useCreateCargo,
   usePerfilNegocio,
   useRemoverCargo,
   useSalvarPerfilNegocio,
+  useSimulacoesProducaoInterna,
   useUpdateCargo,
 } from "@/hooks/useData";
 import { custoMensalCargo, custoProducaoInternaPorPeca } from "@/engine/custo";
-import { ENCARGOS_SUGERIDOS, formatBRL, formatNumber } from "@/lib/format";
+import { ENCARGOS_SUGERIDOS, formatBRL, formatDate, formatNumber } from "@/lib/format";
 
 const CARGO_VAZIO = { nome: "", salarioBase: "", encargosPct: "", beneficiosMensal: "0", quantidadePessoas: "1" };
+
+const CONTRATACAO_VAZIA = {
+  modo: "existente" as "existente" | "novo",
+  cargoExistenteId: "",
+  nome: "",
+  salario: "",
+  encargosPct: "",
+  beneficiosMensal: "0",
+  duracaoMeses: "",
+};
+
+const MOTIVO_LABELS: Record<string, string> = {
+  eficiencia: "Aumento de eficiência",
+  horas_extras: "Investimento em horas extras",
+  contratacao_extra: "Contratação extra",
+};
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -26,13 +44,13 @@ const TOUR_STEPS: TourStep[] = [
   {
     targetId: "producao-capacidade",
     title: "Capacidade é um número só, para a equipe toda",
-    texto: "Não é por cargo — é quantas peças a linha inteira produz por mês, no ritmo normal.",
+    texto: "Não é por cargo — é quantas peças a linha inteira produz por mês, no ritmo normal. Já mostramos aqui o custo por peça nesse ritmo.",
   },
   {
     targetId: "producao-simulador",
     title: "Simule o custo por peça",
     texto:
-      "Informe quanto pretende produzir para ver o custo de mão de obra por peça. O ajuste de capacidade é opcional — serve para simular hora extra ou absenteísmo sem alterar a capacidade base salva.",
+      "Informe quanto pretende produzir para ver o custo de mão de obra por peça. Se a quantidade passar da capacidade, o sistema pergunta como você pretende dar conta do aumento.",
   },
 ];
 
@@ -40,10 +58,12 @@ export function ProducaoInternaScreen() {
   const { user } = useAuth();
   const { data: perfil } = usePerfilNegocio(user?.id);
   const { data: cargos = [] } = useCargosProducao();
+  const { data: simulacoes = [] } = useSimulacoesProducaoInterna();
   const createCargo = useCreateCargo();
   const updateCargo = useUpdateCargo();
   const removerCargo = useRemoverCargo();
   const salvarPerfil = useSalvarPerfilNegocio();
+  const aprovarSimulacao = useAprovarSimulacao();
   const tour = useTourAutoShow("producao_interna");
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -55,6 +75,9 @@ export function ProducaoInternaScreen() {
 
   const [simQuantidade, setSimQuantidade] = useState("");
   const [simAjustePct, setSimAjustePct] = useState("0");
+  const [motivoAumento, setMotivoAumento] = useState<"eficiencia" | "horas_extras" | "contratacao_extra" | null>(null);
+  const [contratacao, setContratacao] = useState(CONTRATACAO_VAZIA);
+  const [aprovada, setAprovada] = useState(false);
 
   const encargosSugerido = perfil?.regime_tributario_padrao ? ENCARGOS_SUGERIDOS[perfil.regime_tributario_padrao] : undefined;
 
@@ -73,9 +96,54 @@ export function ProducaoInternaScreen() {
   );
 
   const capacidadeNum = Number(capacidade) || 0;
+  const custoPorPecaCapacidade = capacidadeNum > 0 && folhaMensalTotal > 0 ? folhaMensalTotal / capacidadeNum : null;
+
   const simQuantidadeNum = Number(simQuantidade) || 0;
   const simAjusteNum = Number(simAjustePct) || 0;
-  const resultado = custoProducaoInternaPorPeca(folhaMensalTotal, capacidadeNum, simAjusteNum, simQuantidadeNum);
+  const resultadoPadrao = custoProducaoInternaPorPeca(folhaMensalTotal, capacidadeNum, simAjusteNum, simQuantidadeNum);
+
+  const excedeCapacidade = capacidadeNum > 0 && simQuantidadeNum > capacidadeNum;
+  const pctNecessarioParaCobrir = capacidadeNum > 0 ? (simQuantidadeNum / capacidadeNum - 1) * 100 : 0;
+
+  const cargoExistenteEscolhido = cargos.find((c) => c.id === contratacao.cargoExistenteId);
+  const nomeContratacao = contratacao.modo === "existente" ? cargoExistenteEscolhido?.nome ?? "" : contratacao.nome.trim();
+  const encargosContratacao = contratacao.modo === "existente" ? cargoExistenteEscolhido?.encargos_pct ?? 0 : Number(contratacao.encargosPct) || 0;
+  const beneficiosContratacao =
+    contratacao.modo === "existente" ? cargoExistenteEscolhido?.beneficios_mensal ?? 0 : Number(contratacao.beneficiosMensal) || 0;
+  const salarioContratacao = Number(contratacao.salario) || 0;
+  const duracaoContratacao = Number(contratacao.duracaoMeses) || 0;
+
+  const contratacaoValida =
+    !!nomeContratacao &&
+    salarioContratacao > 0 &&
+    duracaoContratacao > 0 &&
+    (contratacao.modo === "existente" ? !!contratacao.cargoExistenteId : true);
+
+  const custoMensalTemp = contratacaoValida
+    ? custoMensalCargo({
+        salarioBase: salarioContratacao,
+        encargosPct: encargosContratacao,
+        beneficiosMensal: beneficiosContratacao,
+        quantidadePessoas: 1,
+      })
+    : 0;
+  const folhaEfetivaContratacao = folhaMensalTotal + custoMensalTemp;
+  const capacidadeEfetivaContratacao = Math.max(capacidadeNum, simQuantidadeNum);
+  const resultadoContratacao = custoProducaoInternaPorPeca(
+    folhaEfetivaContratacao,
+    capacidadeEfetivaContratacao,
+    0,
+    simQuantidadeNum,
+  );
+
+  const usandoCenarioContratacao = excedeCapacidade && motivoAumento === "contratacao_extra";
+  const resultado = usandoCenarioContratacao ? resultadoContratacao : resultadoPadrao;
+
+  const podeAprovar =
+    folhaMensalTotal > 0 &&
+    capacidadeNum > 0 &&
+    simQuantidadeNum > 0 &&
+    (!excedeCapacidade || (motivoAumento !== null && (motivoAumento !== "contratacao_extra" || contratacaoValida)));
 
   function iniciarEdicao(cargo: (typeof cargos)[number]) {
     setEditandoId(cargo.id);
@@ -120,6 +188,43 @@ export function ProducaoInternaScreen() {
     await salvarPerfil.mutateAsync({ userId: user.id, capacidade_mensal_pecas: capacidadeNum });
     setCapacidadeSalva(true);
     setTimeout(() => setCapacidadeSalva(false), 2000);
+  }
+
+  function escolherMotivo(motivo: "eficiencia" | "horas_extras" | "contratacao_extra") {
+    setMotivoAumento(motivo);
+    setAprovada(false);
+    if (motivo === "eficiencia" || motivo === "horas_extras") {
+      setSimAjustePct(String(Math.ceil(pctNecessarioParaCobrir * 100) / 100));
+    }
+  }
+
+  async function handleAprovarInvestimento() {
+    if (!user || !podeAprovar) return;
+    const cenarioContratacao = excedeCapacidade && motivoAumento === "contratacao_extra";
+    const efetivo = cenarioContratacao ? resultadoContratacao : resultadoPadrao;
+    await aprovarSimulacao.mutateAsync({
+      user_id: user.id,
+      quantidade_simulada: simQuantidadeNum,
+      ajuste_pct: cenarioContratacao ? 0 : simAjusteNum,
+      motivo_aumento: excedeCapacidade ? motivoAumento : null,
+      capacidade_base: capacidadeNum,
+      capacidade_efetiva: efetivo.capacidadeEfetiva,
+      folha_base: folhaMensalTotal,
+      folha_efetiva: cenarioContratacao ? folhaEfetivaContratacao : folhaMensalTotal,
+      custo_por_peca: efetivo.custoPorPeca ?? 0,
+      ...(cenarioContratacao
+        ? {
+            cargo_temporario_id: contratacao.modo === "existente" ? contratacao.cargoExistenteId : null,
+            cargo_temporario_nome: nomeContratacao,
+            cargo_temporario_salario: salarioContratacao,
+            cargo_temporario_encargos_pct: encargosContratacao,
+            cargo_temporario_beneficios_mensal: beneficiosContratacao,
+            cargo_temporario_duracao_meses: duracaoContratacao,
+          }
+        : {}),
+    });
+    setAprovada(true);
+    setTimeout(() => setAprovada(false), 2500);
   }
 
   if (!podeUsar) {
@@ -294,7 +399,7 @@ export function ProducaoInternaScreen() {
           Quantas peças a sua equipe inteira consegue produzir por mês, em ritmo normal — some todos os cargos e
           etapas (corte, costura, acabamento), pelo elo mais lento da linha.
         </p>
-        <div className="flex items-end gap-3">
+        <div className="flex items-end gap-3 flex-wrap">
           <Field
             label="Capacidade mensal (peças)"
             hint={
@@ -311,9 +416,17 @@ export function ProducaoInternaScreen() {
           </Button>
           {capacidadeSalva && <span className="text-sm text-success">Salvo!</span>}
         </div>
+        {custoPorPecaCapacidade != null && (
+          <div className="mt-4 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-3">
+            <div className="text-xs text-accent-foreground/80">
+              Custo de mão de obra por peça, produzindo exatamente {formatNumber(capacidadeNum)} peças/mês
+            </div>
+            <div className="text-lg font-semibold text-accent-foreground">{formatBRL(custoPorPecaCapacidade)}</div>
+          </div>
+        )}
       </Card>
 
-      <Card data-tour="producao-simulador">
+      <Card className="mb-6" data-tour="producao-simulador">
         <h2 className="mb-1 text-sm font-semibold text-muted-foreground">Simulador de custo por peça</h2>
         <p className="mb-4 text-xs text-muted-foreground">
           Informe quanto pretende produzir para ver o custo de mão de obra própria por peça — esse valor pode ser
@@ -321,7 +434,18 @@ export function ProducaoInternaScreen() {
         </p>
         <div className="grid grid-cols-3 gap-4 mb-4">
           <Field label="Quantidade a produzir">
-            <Input type="number" min="0" step="1" value={simQuantidade} onChange={(e) => setSimQuantidade(e.target.value)} placeholder="ex: 500" />
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={simQuantidade}
+              onChange={(e) => {
+                setSimQuantidade(e.target.value);
+                setMotivoAumento(null);
+                setAprovada(false);
+              }}
+              placeholder="ex: 500"
+            />
           </Field>
           <Field
             label="Ajuste de capacidade (%)"
@@ -333,7 +457,14 @@ export function ProducaoInternaScreen() {
               </InfoTooltip>
             }
           >
-            <Input type="number" step="any" value={simAjustePct} onChange={(e) => setSimAjustePct(e.target.value)} placeholder="0" />
+            <Input
+              type="number"
+              step="any"
+              value={simAjustePct}
+              onChange={(e) => setSimAjustePct(e.target.value)}
+              disabled={usandoCenarioContratacao}
+              placeholder="0"
+            />
           </Field>
         </div>
 
@@ -344,36 +475,188 @@ export function ProducaoInternaScreen() {
           <div className="text-sm text-muted-foreground">Informe e salve a capacidade mensal acima para simular.</div>
         )}
 
-        {folhaMensalTotal > 0 && capacidadeNum > 0 && simQuantidadeNum > 0 && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div className="rounded-md bg-muted px-4 py-3">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                Capacidade efetiva/mês
-                <InfoTooltip>Capacidade mensal já com o ajuste de horas extra/absenteísmo aplicado.</InfoTooltip>
+        {excedeCapacidade && (
+          <div className="mb-4 rounded-md border border-border bg-muted p-4">
+            <p className="mb-3 text-sm font-medium">
+              A quantidade simulada ({formatNumber(simQuantidadeNum)}) é maior que a capacidade mensal salva (
+              {formatNumber(capacidadeNum)}). Esse aumento de capacidade é por:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(["eficiencia", "horas_extras", "contratacao_extra"] as const).map((motivo) => (
+                <Button
+                  key={motivo}
+                  type="button"
+                  variant={motivoAumento === motivo ? "primary" : "secondary"}
+                  onClick={() => escolherMotivo(motivo)}
+                >
+                  {MOTIVO_LABELS[motivo]}
+                </Button>
+              ))}
+            </div>
+
+            {(motivoAumento === "eficiencia" || motivoAumento === "horas_extras") && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Para produzir essa quantidade, a capacidade precisa subir {formatNumber(pctNecessarioParaCobrir)}% —
+                já aplicamos esse valor no campo "Ajuste de capacidade" acima. Ajuste manualmente se quiser simular um
+                cenário diferente.
+              </p>
+            )}
+
+            {motivoAumento === "contratacao_extra" && (
+              <div className="mt-4 grid grid-cols-2 gap-3 rounded-md bg-background p-4">
+                <Field label="Cargo do temporário">
+                  <Select
+                    value={contratacao.modo === "existente" ? contratacao.cargoExistenteId : "__novo__"}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "__novo__") {
+                        setContratacao((c) => ({ ...c, modo: "novo", cargoExistenteId: "" }));
+                      } else {
+                        setContratacao((c) => ({ ...c, modo: "existente", cargoExistenteId: v }));
+                      }
+                    }}
+                  >
+                    <option value="">Selecione...</option>
+                    {cargos.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
+                    <option value="__novo__">+ Novo cargo</option>
+                  </Select>
+                </Field>
+                {contratacao.modo === "novo" && (
+                  <Field label="Nome do novo cargo">
+                    <Input value={contratacao.nome} onChange={(e) => setContratacao((c) => ({ ...c, nome: e.target.value }))} placeholder="ex: Costureira temporária" />
+                  </Field>
+                )}
+                <Field label="Salário do temporário (R$)">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={contratacao.salario}
+                    onChange={(e) => setContratacao((c) => ({ ...c, salario: e.target.value }))}
+                  />
+                </Field>
+                <Field label="Duração (meses)">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={contratacao.duracaoMeses}
+                    onChange={(e) => setContratacao((c) => ({ ...c, duracaoMeses: e.target.value }))}
+                    placeholder="ex: 3"
+                  />
+                </Field>
+                {contratacao.modo === "novo" && (
+                  <>
+                    <Field label="Encargos (%)">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={contratacao.encargosPct}
+                        onChange={(e) => setContratacao((c) => ({ ...c, encargosPct: e.target.value }))}
+                        placeholder={encargosSugerido ? String(encargosSugerido) : "32"}
+                      />
+                    </Field>
+                    <Field label="Benefícios/mês (R$)">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={contratacao.beneficiosMensal}
+                        onChange={(e) => setContratacao((c) => ({ ...c, beneficiosMensal: e.target.value }))}
+                      />
+                    </Field>
+                  </>
+                )}
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  Este cargo temporário não é salvo no quadro permanente de cargos — ele existe só para esta
+                  simulação, até você clicar em "Aprovar investimento".
+                </p>
               </div>
-              <div className="text-lg font-semibold">{formatNumber(resultado.capacidadeEfetiva)} peças</div>
-            </div>
-            <div className="rounded-md bg-muted px-4 py-3">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                Meses necessários
-                <InfoTooltip>Quantidade a produzir ÷ capacidade efetiva — quanto tempo a equipe leva para dar conta desse volume.</InfoTooltip>
-              </div>
-              <div className="text-lg font-semibold">{formatNumber(resultado.mesesNecessarios)}</div>
-            </div>
-            <div className="rounded-md bg-muted px-4 py-3">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                Folha do período
-                <InfoTooltip>Folha mensal total × meses necessários — quanto sua equipe custa enquanto produz esse volume.</InfoTooltip>
-              </div>
-              <div className="text-lg font-semibold">{formatBRL(resultado.custoTotalPeriodo)}</div>
-            </div>
-            <div className="rounded-md bg-accent px-4 py-3">
-              <div className="text-xs text-accent-foreground/80">Custo por peça</div>
-              <div className="text-lg font-semibold text-accent-foreground">{formatBRL(resultado.custoPorPeca)}</div>
-            </div>
+            )}
           </div>
         )}
+
+        {folhaMensalTotal > 0 && capacidadeNum > 0 && simQuantidadeNum > 0 && resultado.custoPorPeca != null && (
+          <>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="rounded-md bg-muted px-4 py-3">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Capacidade efetiva/mês
+                  <InfoTooltip>Capacidade mensal já com o ajuste de horas extra/absenteísmo, ou o reforço da contratação extra.</InfoTooltip>
+                </div>
+                <div className="text-lg font-semibold">{formatNumber(resultado.capacidadeEfetiva)} peças</div>
+              </div>
+              <div className="rounded-md bg-muted px-4 py-3">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Meses necessários
+                  <InfoTooltip>Quantidade a produzir ÷ capacidade efetiva — quanto tempo a equipe leva para dar conta desse volume.</InfoTooltip>
+                </div>
+                <div className="text-lg font-semibold">{formatNumber(resultado.mesesNecessarios)}</div>
+              </div>
+              <div className="rounded-md bg-muted px-4 py-3">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Folha do período
+                  <InfoTooltip>Folha mensal total (com o temporário, se houver) × meses necessários.</InfoTooltip>
+                </div>
+                <div className="text-lg font-semibold">{formatBRL(resultado.custoTotalPeriodo)}</div>
+              </div>
+              <div className="rounded-md bg-accent px-4 py-3">
+                <div className="text-xs text-accent-foreground/80">Custo por peça</div>
+                <div className="text-lg font-semibold text-accent-foreground">{formatBRL(resultado.custoPorPeca)}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-3">
+              <Button type="button" onClick={handleAprovarInvestimento} disabled={!podeAprovar || aprovarSimulacao.isPending}>
+                {aprovarSimulacao.isPending ? "Salvando..." : "Aprovar investimento"}
+              </Button>
+              {aprovada && <span className="text-sm text-success">Simulação salva!</span>}
+            </div>
+          </>
+        )}
       </Card>
+
+      {simulacoes.length > 0 && (
+        <Card>
+          <h2 className="mb-1 text-sm font-semibold text-muted-foreground">Simulações aprovadas</h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Histórico de simulações que você aprovou — útil para comparar cenários se o salário ou a equipe mudar.
+          </p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="py-2 pr-4">Data</th>
+                <th className="py-2 pr-4">Quantidade</th>
+                <th className="py-2 pr-4">Motivo</th>
+                <th className="py-2 pr-4">Capacidade efetiva</th>
+                <th className="py-2 pr-4">Custo por peça</th>
+              </tr>
+            </thead>
+            <tbody>
+              {simulacoes.map((s) => (
+                <tr key={s.id} className="border-b border-border/60">
+                  <td className="py-2 pr-4">{formatDate(s.criado_em)}</td>
+                  <td className="py-2 pr-4">{formatNumber(s.quantidade_simulada)}</td>
+                  <td className="py-2 pr-4">
+                    {s.motivo_aumento ? (
+                      <Badge tone="muted">{MOTIVO_LABELS[s.motivo_aumento] ?? s.motivo_aumento}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">{formatNumber(s.capacidade_efetiva)} peças</td>
+                  <td className="py-2 pr-4 font-medium">{formatBRL(s.custo_por_peca)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </div>
   );
 }

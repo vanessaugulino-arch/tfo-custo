@@ -124,6 +124,34 @@ export function useRemoverCargo() {
   });
 }
 
+export type SimulacaoProducaoInterna = Tables["simulacoes_producao_interna"]["Row"];
+
+export function useSimulacoesProducaoInterna() {
+  return useQuery({
+    queryKey: ["simulacoes_producao_interna"],
+    queryFn: async (): Promise<SimulacaoProducaoInterna[]> => {
+      const { data, error } = await supabase
+        .from("simulacoes_producao_interna")
+        .select("*")
+        .order("criado_em", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useAprovarSimulacao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: Tables["simulacoes_producao_interna"]["Insert"]) => {
+      const { data, error } = await supabase.from("simulacoes_producao_interna").insert(input).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["simulacoes_producao_interna"] }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Catálogos simples (fornecedores, materiais, categorias, serviços)
 // ---------------------------------------------------------------------------
