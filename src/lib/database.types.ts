@@ -25,6 +25,7 @@ export type Database = {
           nome: string
           quantidade_pessoas: number
           salario_base: number
+          user_id: string
         }
         Insert: {
           ativo?: boolean
@@ -36,6 +37,7 @@ export type Database = {
           nome: string
           quantidade_pessoas?: number
           salario_base?: number
+          user_id?: string
         }
         Update: {
           ativo?: boolean
@@ -47,6 +49,7 @@ export type Database = {
           nome?: string
           quantidade_pessoas?: number
           salario_base?: number
+          user_id?: string
         }
         Relationships: []
       }
@@ -55,16 +58,19 @@ export type Database = {
           criado_em: string
           id: string
           nome: string
+          user_id: string
         }
         Insert: {
           criado_em?: string
           id?: string
           nome: string
+          user_id?: string
         }
         Update: {
           criado_em?: string
           id?: string
           nome?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -76,6 +82,7 @@ export type Database = {
           nome: string
           periodo_fim: string | null
           periodo_inicio: string | null
+          user_id: string
         }
         Insert: {
           criado_em?: string
@@ -84,6 +91,7 @@ export type Database = {
           nome: string
           periodo_fim?: string | null
           periodo_inicio?: string | null
+          user_id?: string
         }
         Update: {
           criado_em?: string
@@ -92,6 +100,7 @@ export type Database = {
           nome?: string
           periodo_fim?: string | null
           periodo_inicio?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -109,6 +118,7 @@ export type Database = {
           quantidade_comprada: number
           regime_tributario: string
           unidade_compra: string
+          user_id: string
         }
         Insert: {
           aliquota_credito_pct?: number
@@ -123,6 +133,7 @@ export type Database = {
           quantidade_comprada: number
           regime_tributario?: string
           unidade_compra?: string
+          user_id?: string
         }
         Update: {
           aliquota_credito_pct?: number
@@ -137,6 +148,7 @@ export type Database = {
           quantidade_comprada?: number
           regime_tributario?: string
           unidade_compra?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -161,18 +173,21 @@ export type Database = {
           criado_em: string
           id: string
           nome: string
+          user_id: string
         }
         Insert: {
           codigo?: string | null
           criado_em?: string
           id?: string
           nome: string
+          user_id?: string
         }
         Update: {
           codigo?: string | null
           criado_em?: string
           id?: string
           nome?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -184,6 +199,7 @@ export type Database = {
           id: string
           nome: string
           unidade_padrao: string
+          user_id: string
         }
         Insert: {
           codigo?: string | null
@@ -192,6 +208,7 @@ export type Database = {
           id?: string
           nome: string
           unidade_padrao?: string
+          user_id?: string
         }
         Update: {
           codigo?: string | null
@@ -200,6 +217,7 @@ export type Database = {
           id?: string
           nome?: string
           unidade_padrao?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -213,6 +231,7 @@ export type Database = {
           referencia_id: string | null
           referencia_tipo: string | null
           tipo: string
+          user_id: string
         }
         Insert: {
           criado_em?: string
@@ -223,6 +242,7 @@ export type Database = {
           referencia_id?: string | null
           referencia_tipo?: string | null
           tipo: string
+          user_id?: string
         }
         Update: {
           criado_em?: string
@@ -233,6 +253,7 @@ export type Database = {
           referencia_id?: string | null
           referencia_tipo?: string | null
           tipo?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -302,6 +323,7 @@ export type Database = {
           id: string
           preco_unitario_aplicado: number
           produto_id: string
+          user_id: string
         }
         Insert: {
           compra_insumo_id: string
@@ -312,6 +334,7 @@ export type Database = {
           id?: string
           preco_unitario_aplicado: number
           produto_id: string
+          user_id?: string
         }
         Update: {
           compra_insumo_id?: string
@@ -322,6 +345,7 @@ export type Database = {
           id?: string
           preco_unitario_aplicado?: number
           produto_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -365,6 +389,7 @@ export type Database = {
           servico_engajamento_id: string | null
           servico_fornecedor_id: string
           tempo_minutos: number | null
+          user_id: string
           valor_calculado: number | null
         }
         Insert: {
@@ -377,6 +402,7 @@ export type Database = {
           servico_engajamento_id?: string | null
           servico_fornecedor_id: string
           tempo_minutos?: number | null
+          user_id?: string
           valor_calculado?: number | null
         }
         Update: {
@@ -389,6 +415,7 @@ export type Database = {
           servico_engajamento_id?: string | null
           servico_fornecedor_id?: string
           tempo_minutos?: number | null
+          user_id?: string
           valor_calculado?: number | null
         }
         Relationships: [
@@ -434,6 +461,7 @@ export type Database = {
           nome: string
           quantidade_produzida: number | null
           status: string
+          user_id: string
         }
         Insert: {
           aprovado_em?: string | null
@@ -446,6 +474,7 @@ export type Database = {
           nome: string
           quantidade_produzida?: number | null
           status?: string
+          user_id?: string
         }
         Update: {
           aprovado_em?: string | null
@@ -458,6 +487,7 @@ export type Database = {
           nome?: string
           quantidade_produzida?: number | null
           status?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -487,6 +517,7 @@ export type Database = {
           material_resultante_id: string
           quantidade_beneficiada: number
           servico_fornecedor_id: string
+          user_id: string
         }
         Insert: {
           compra_insumo_origem_id?: string | null
@@ -498,6 +529,7 @@ export type Database = {
           material_resultante_id: string
           quantidade_beneficiada: number
           servico_fornecedor_id: string
+          user_id?: string
         }
         Update: {
           compra_insumo_origem_id?: string | null
@@ -509,6 +541,7 @@ export type Database = {
           material_resultante_id?: string
           quantidade_beneficiada?: number
           servico_fornecedor_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -584,6 +617,7 @@ export type Database = {
           custo_por_peca_resolvido: number | null
           id: string
           servico_fornecedor_id: string
+          user_id: string
           valor_total: number
         }
         Insert: {
@@ -593,6 +627,7 @@ export type Database = {
           custo_por_peca_resolvido?: number | null
           id?: string
           servico_fornecedor_id: string
+          user_id?: string
           valor_total: number
         }
         Update: {
@@ -602,6 +637,7 @@ export type Database = {
           custo_por_peca_resolvido?: number | null
           id?: string
           servico_fornecedor_id?: string
+          user_id?: string
           valor_total?: number
         }
         Relationships: [
@@ -631,6 +667,7 @@ export type Database = {
           id: string
           modelo_precificacao: string
           servico_id: string
+          user_id: string
         }
         Insert: {
           beneficiamento?: boolean
@@ -641,6 +678,7 @@ export type Database = {
           id?: string
           modelo_precificacao: string
           servico_id: string
+          user_id?: string
         }
         Update: {
           beneficiamento?: boolean
@@ -651,6 +689,7 @@ export type Database = {
           id?: string
           modelo_precificacao?: string
           servico_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -680,14 +719,17 @@ export type Database = {
         Row: {
           categoria_produto_id: string
           servico_fornecedor_id: string
+          user_id: string
         }
         Insert: {
           categoria_produto_id: string
           servico_fornecedor_id: string
+          user_id?: string
         }
         Update: {
           categoria_produto_id?: string
           servico_fornecedor_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -712,18 +754,21 @@ export type Database = {
           criado_em: string
           id: string
           nome: string
+          user_id: string
         }
         Insert: {
           codigo?: string | null
           criado_em?: string
           id?: string
           nome: string
+          user_id?: string
         }
         Update: {
           codigo?: string | null
           criado_em?: string
           id?: string
           nome?: string
+          user_id?: string
         }
         Relationships: []
       }
