@@ -11,6 +11,7 @@ import {
   useCreateFornecedor,
   useCreateMaterial,
   useDeleteCompraInsumo,
+  useEstoqueAtual,
   useFornecedores,
   useMateriais,
   usePerfilNegocio,
@@ -65,6 +66,8 @@ export function InsumosScreen() {
   const { data: fornecedores = [] } = useFornecedores();
   const { data: materiais = [] } = useMateriais();
   const { data: compras = [] } = useComprasInsumo();
+  const { data: estoqueAtual = [] } = useEstoqueAtual();
+  const saldoPorMaterial = new Map(estoqueAtual.map((e) => [e.material_id, e]));
   const createFornecedor = useCreateFornecedor();
   const createMaterial = useCreateMaterial();
   const updateMaterial = useUpdateMaterial();
@@ -493,6 +496,16 @@ export function InsumosScreen() {
                 <th className="py-2 pr-4">Data</th>
                 <th className="py-2 pr-4">Fornecedor</th>
                 <th className="py-2 pr-4">Material</th>
+                <th className="py-2 pr-4">
+                  <span className="inline-flex items-center gap-1">
+                    Saldo atual
+                    <InfoTooltip>
+                      Estoque restante do material HOJE (soma de todos os lotes, já descontando o que foi usado em
+                      beneficiamento ou produtos aprovados) — não é a mesma coisa que a "Qtd. comprada" desta linha,
+                      que é o histórico da compra e nunca muda.
+                    </InfoTooltip>
+                  </span>
+                </th>
                 <th className="py-2 pr-4">Pack</th>
                 <th className="py-2 pr-4">Tipo</th>
                 <th className="py-2 pr-4">Qtd. comprada</th>
@@ -510,6 +523,10 @@ export function InsumosScreen() {
                   <td className="py-2 pr-4">{formatDate(c.data_compra)}</td>
                   <td className="py-2 pr-4">{c.fornecedor?.nome} <span className="text-muted-foreground">({c.fornecedor?.codigo})</span></td>
                   <td className="py-2 pr-4">{c.material ? labelMaterial(c.material) : ""} <span className="text-muted-foreground">({c.material?.codigo})</span></td>
+                  <td className="py-2 pr-4">
+                    {formatNumber(saldoPorMaterial.get(c.material_id)?.saldo_atual ?? 0)}{" "}
+                    {saldoPorMaterial.get(c.material_id)?.unidadeEstoque ?? "m"}
+                  </td>
                   <td className="py-2 pr-4">{formatNumber(c.pack_quantidade)}</td>
                   <td className="py-2 pr-4">{UNIDADE_COMPRA_LABELS[c.unidade_compra] ?? c.unidade_compra}</td>
                   <td className="py-2 pr-4">
@@ -538,7 +555,7 @@ export function InsumosScreen() {
               ))}
               {compras.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="py-6 text-center text-muted-foreground">
+                  <td colSpan={13} className="py-6 text-center text-muted-foreground">
                     Nenhuma compra registrada ainda.
                   </td>
                 </tr>

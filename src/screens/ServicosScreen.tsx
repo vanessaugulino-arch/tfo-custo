@@ -41,7 +41,7 @@ const TOUR_STEPS: TourStep[] = [
     targetId: "servicos-modelo",
     title: "Escolha o modelo de precificação com cuidado",
     texto:
-      "É a decisão mais importante desta tela: 'por coleção' e 'por peça desenvolvida' dividem um valor combinado entre várias peças; 'por peça produzida' cobra o valor cheio em cada peça; 'por tempo' multiplica minutos pelo custo por minuto; 'metro corrido' é para quando o fornecedor transforma uma matéria-prima sua em outra (beneficiamento) — os detalhes dessa transformação aparecem logo abaixo.",
+      "É a decisão mais importante desta tela: 'por coleção' e 'por peça desenvolvida' dividem um valor combinado entre várias peças; 'por peça produzida' cobra o valor cheio em cada peça; 'por tempo' multiplica minutos pelo custo por minuto; 'metro corrido' cobra por metro linear. Assim que você escolher qualquer um desses modelos, o sistema pergunta se o serviço é um beneficiamento (transforma uma matéria-prima sua em outra) — se for, os campos de origem, material resultante e custo aparecem logo abaixo.",
   },
   {
     targetId: "servicos-colecao",
@@ -63,6 +63,7 @@ interface FormServico {
   modelo: ModeloPrecificacaoServico;
   colecaoId: string | null;
   custoPorMinuto: string;
+  beneficiamento: boolean;
 }
 
 const FORM_VAZIO: FormServico = {
@@ -73,6 +74,7 @@ const FORM_VAZIO: FormServico = {
   modelo: "peca_desenvolvida",
   colecaoId: null,
   custoPorMinuto: "",
+  beneficiamento: false,
 };
 
 interface FormBeneficiamento {
@@ -124,10 +126,9 @@ export function ServicosScreen() {
   const [form, setForm] = useState<FormServico>(FORM_VAZIO);
   const [benef, setBenef] = useState<FormBeneficiamento>(beneficiamentoVazio());
   const [erro, setErro] = useState<string | null>(null);
-  const [confirmandoMetroCorrido, setConfirmandoMetroCorrido] = useState(false);
-  const [modeloAntesDoMetroCorrido, setModeloAntesDoMetroCorrido] = useState<ModeloPrecificacaoServico>("peca_desenvolvida");
+  const [confirmandoBeneficiamento, setConfirmandoBeneficiamento] = useState(false);
 
-  const isBeneficiamento = form.modelo === "metro_corrido";
+  const isBeneficiamento = form.beneficiamento;
 
   const { data: materiaisOrigemDisponiveis = [] } = useMateriaisPorFornecedor(benef.fornecedorOrigemId);
   const { data: compraOrigem } = useUltimaCompraPorFornecedorMaterial(benef.fornecedorOrigemId, benef.materialOrigemId);
@@ -139,20 +140,14 @@ export function ServicosScreen() {
     quantidadeBenefNum > 0 ? (custoOrigemUnitario * quantidadeBenefNum + custoBenefNum) / quantidadeBenefNum : 0;
 
   function handleModeloChange(novoModelo: ModeloPrecificacaoServico) {
-    if (novoModelo === "metro_corrido") {
-      setModeloAntesDoMetroCorrido(form.modelo);
-      setForm((f) => ({ ...f, modelo: novoModelo }));
-      setConfirmandoMetroCorrido(true);
-    } else {
-      setForm((f) => ({ ...f, modelo: novoModelo }));
-    }
+    setForm((f) => ({ ...f, modelo: novoModelo }));
+    setConfirmandoBeneficiamento(true);
   }
 
   function confirmarBeneficiamento(ehBeneficiamento: boolean) {
-    setConfirmandoMetroCorrido(false);
-    if (!ehBeneficiamento) {
-      setForm((f) => ({ ...f, modelo: modeloAntesDoMetroCorrido }));
-    }
+    setConfirmandoBeneficiamento(false);
+    setForm((f) => ({ ...f, beneficiamento: ehBeneficiamento }));
+    if (!ehBeneficiamento) setBenef(beneficiamentoVazio());
   }
 
   async function handleImportar(linhas: Record<string, string>[]): Promise<ResultadoImport> {
@@ -216,6 +211,7 @@ export function ServicosScreen() {
       modelo: sf.modelo_precificacao as ModeloPrecificacaoServico,
       colecaoId: sf.colecao_id,
       custoPorMinuto: sf.custo_por_minuto != null ? String(sf.custo_por_minuto) : "",
+      beneficiamento: sf.beneficiamento,
     });
     const b = beneficiamentoDoServico(sf.id);
     if (b) {
@@ -386,7 +382,7 @@ export function ServicosScreen() {
         <ImportModal modelo={MODELO_SERVICOS} onClose={() => setImportAberto(false)} onConfirmar={handleImportar} />
       )}
 
-      {confirmandoMetroCorrido && (
+      {confirmandoBeneficiamento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm px-4">
           <Card className="max-w-lg">
             <h2 className="mb-2 text-base font-semibold">Esse serviço é um beneficiamento de uma matéria-prima?</h2>
@@ -397,8 +393,8 @@ export function ServicosScreen() {
             </p>
             <p className="mb-4 text-sm text-muted-foreground">
               Isso é diferente de um <strong>acabamento</strong>, que acontece numa peça já cortada ou pronta — ex:
-              tingir ou estampar depois de cortada. Acabamento não é um "metro corrido" — use outro modelo de
-              precificação para ele (por peça produzida ou desenvolvida, por exemplo).
+              tingir ou estampar depois de cortada. Se for esse o caso, responda "Não" — o modelo de precificação
+              escolhido continua valendo normalmente.
             </p>
             <div className="flex gap-2">
               <Button type="button" onClick={() => confirmarBeneficiamento(true)}>

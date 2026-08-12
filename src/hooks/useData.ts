@@ -954,10 +954,10 @@ export function useColecoes() {
 export function useCreateColecao() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { nome: string; periodoInicio: string | null; periodoFim: string | null }) => {
+    mutationFn: async (input: { nome: string }) => {
       const { data, error } = await supabase
         .from("colecoes")
-        .insert({ nome: input.nome, periodo_inicio: input.periodoInicio, periodo_fim: input.periodoFim })
+        .insert({ nome: input.nome })
         .select()
         .single();
       if (error) throw error;

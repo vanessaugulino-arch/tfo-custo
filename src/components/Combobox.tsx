@@ -46,6 +46,8 @@ export function Combobox({ options, value, onChange, onCreate, placeholder, disa
       onChange(id);
       setOpen(false);
       setQuery("");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Não foi possível criar este item.");
     } finally {
       setCreating(false);
     }

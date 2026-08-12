@@ -107,8 +107,6 @@ export function NovoProdutoScreen() {
   const [colecaoId, setColecaoId] = useState<string | null>(null);
   const [novaColecao, setNovaColecao] = useState(false);
   const [colecaoNome, setColecaoNome] = useState("");
-  const [colecaoInicio, setColecaoInicio] = useState("");
-  const [colecaoFim, setColecaoFim] = useState("");
   const [quantidadeProduzida, setQuantidadeProduzida] = useState("");
   const quantidadeProduzidaNum = Number(quantidadeProduzida) || 0;
   const [erro, setErro] = useState<string | null>(null);
@@ -195,16 +193,10 @@ export function NovoProdutoScreen() {
 
   async function handleCriarColecao() {
     if (!colecaoNome.trim()) return;
-    const nova = await createColecao.mutateAsync({
-      nome: colecaoNome.trim(),
-      periodoInicio: colecaoInicio || null,
-      periodoFim: colecaoFim || null,
-    });
+    const nova = await createColecao.mutateAsync({ nome: colecaoNome.trim() });
     setColecaoId(nova.id);
     setNovaColecao(false);
     setColecaoNome("");
-    setColecaoInicio("");
-    setColecaoFim("");
   }
 
   async function addServicoLinha() {
@@ -423,10 +415,6 @@ export function NovoProdutoScreen() {
               <div className="flex flex-col gap-2 rounded-md border border-border p-3">
                 <Input placeholder="Nome da coleção" value={colecaoNome} onChange={(e) => setColecaoNome(e.target.value)} />
                 <div className="flex gap-2">
-                  <Input type="date" value={colecaoInicio} onChange={(e) => setColecaoInicio(e.target.value)} />
-                  <Input type="date" value={colecaoFim} onChange={(e) => setColecaoFim(e.target.value)} />
-                </div>
-                <div className="flex gap-2">
                   <Button type="button" onClick={handleCriarColecao} disabled={createColecao.isPending}>
                     Criar coleção
                   </Button>
@@ -448,6 +436,128 @@ export function NovoProdutoScreen() {
             />
           </Field>
         </div>
+      </Card>
+
+      {/* Insumos */}
+      <Card className="mb-6">
+        <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Insumos / matérias-primas</h2>
+        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 items-end mb-4">
+          <Field label="Material">
+            <Combobox
+              options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
+              value={draftMaterialId}
+              onChange={setDraftMaterialId}
+              placeholder="Selecionar material..."
+            />
+          </Field>
+          <Field label="Fornecedor">
+            <Combobox
+              options={fornecedores.map((f) => ({ id: f.id, label: f.nome }))}
+              value={draftFornecedorId}
+              onChange={setDraftFornecedorId}
+              placeholder="Selecionar fornecedor..."
+            />
+          </Field>
+          <Field
+            label={`Consumo por peça${compraVigente?.unidade_compra === "peca" ? " (peças)" : " (m)"}`}
+            hint={
+              <InfoTooltip>
+                {compraVigente?.unidade_compra === "peca"
+                  ? "Quantas peças desse aviamento (zíper, botão...) cada unidade do produto usa — o sistema já sabe o preço por peça, calculado na tela de Insumos."
+                  : "Em metros lineares, independente de como o insumo foi comprado (metro, peso ou rolo) — o sistema já converteu o preço para R$/metro na tela de Insumos."}
+              </InfoTooltip>
+            }
+          >
+            <Input type="number" min="0" step="any" value={draftConsumo} onChange={(e) => setDraftConsumo(e.target.value)} />
+          </Field>
+          <Field
+            label="% desperdício"
+            hint={
+              <InfoTooltip>
+                Quebra inevitável no corte e enfesto — geralmente entre 5% e 15%. O custo real soma esse percentual ao
+                consumo líquido do molde.
+              </InfoTooltip>
+            }
+          >
+            <Input type="number" min="0" step="any" value={draftDesperdicio} onChange={(e) => setDraftDesperdicio(e.target.value)} />
+          </Field>
+          <Button type="button" variant="secondary" onClick={addInsumoLinha} disabled={!compraVigente}>
+            Adicionar
+          </Button>
+        </div>
+        {draftFornecedorId && draftMaterialId && !compraVigente && (
+          <div className="mb-4 text-sm text-destructive">
+            Não há compra registrada para este fornecedor + material. Cadastre uma compra na tela de Insumos primeiro.
+          </div>
+        )}
+        {compraVigente && (
+          <div className="mb-4 text-sm text-muted-foreground">
+            Preço unitário vigente (líquido de imposto): <strong>{formatBRL(compraVigente.preco_unitario_liquido)}</strong>
+          </div>
+        )}
+
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-muted-foreground">
+              <th className="py-2 pr-4">Material / fornecedor</th>
+              <th className="py-2 pr-4">Consumo</th>
+              <th className="py-2 pr-4">Desperdício</th>
+              <th className="py-2 pr-4">Preço unitário</th>
+              <th className="py-2 pr-4">Custo por peça</th>
+              <th className="py-2 pr-4">Estoque</th>
+              <th className="py-2 pr-4" />
+            </tr>
+          </thead>
+          <tbody>
+            {insumosLinhas.map((l) => {
+              const { falta, necessario, disponivel } = checarEstoque(l.materialId);
+              return (
+                <tr key={l.key} className="border-b border-border/60">
+                  <td className="py-2 pr-4">{l.label}</td>
+                  <td className="py-2 pr-4">{formatNumber(l.consumoQuantidade)}</td>
+                  <td className="py-2 pr-4">{formatNumber(l.desperdicioPct)}%</td>
+                  <td className="py-2 pr-4">{formatBRL(l.precoUnitarioAplicado)}</td>
+                  <td className="py-2 pr-4">{formatBRL(custoInsumoPorPeca(l))}</td>
+                  <td className="py-2 pr-4">
+                    {falta ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-xs font-medium">
+                        Faltam {formatNumber(necessario - disponivel)}m
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{formatNumber(disponivel)}m disponível</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">
+                    <button type="button" className="underline mr-3" onClick={() => iniciarEdicaoInsumo(l)}>
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="text-destructive"
+                      onClick={() => setInsumosLinhas((prev) => prev.filter((x) => x.key !== l.key))}
+                    >
+                      Remover
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {insumosLinhas.length === 0 && (
+              <tr>
+                <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                  Nenhum insumo adicionado ainda.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {insumosLinhas.some((l) => checarEstoque(l.materialId).falta) && (
+          <div className="mt-4 rounded-md bg-destructive/10 text-destructive px-4 py-3 text-sm">
+            Estoque insuficiente para a quantidade produzida em pelo menos um insumo. Você pode comprar mais do mesmo
+            fornecedor, mas lotes diferentes costumam ter variação de cor/tonalidade — vale confirmar antes de
+            aprovar este produto.
+          </div>
+        )}
       </Card>
 
       {/* Serviços */}
@@ -617,128 +727,6 @@ export function NovoProdutoScreen() {
             )}
           </tbody>
         </table>
-      </Card>
-
-      {/* Insumos */}
-      <Card className="mb-6">
-        <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Insumos / matérias-primas</h2>
-        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 items-end mb-4">
-          <Field label="Material">
-            <Combobox
-              options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
-              value={draftMaterialId}
-              onChange={setDraftMaterialId}
-              placeholder="Selecionar material..."
-            />
-          </Field>
-          <Field label="Fornecedor">
-            <Combobox
-              options={fornecedores.map((f) => ({ id: f.id, label: f.nome }))}
-              value={draftFornecedorId}
-              onChange={setDraftFornecedorId}
-              placeholder="Selecionar fornecedor..."
-            />
-          </Field>
-          <Field
-            label={`Consumo por peça${compraVigente?.unidade_compra === "peca" ? " (peças)" : " (m)"}`}
-            hint={
-              <InfoTooltip>
-                {compraVigente?.unidade_compra === "peca"
-                  ? "Quantas peças desse aviamento (zíper, botão...) cada unidade do produto usa — o sistema já sabe o preço por peça, calculado na tela de Insumos."
-                  : "Em metros lineares, independente de como o insumo foi comprado (metro, peso ou rolo) — o sistema já converteu o preço para R$/metro na tela de Insumos."}
-              </InfoTooltip>
-            }
-          >
-            <Input type="number" min="0" step="any" value={draftConsumo} onChange={(e) => setDraftConsumo(e.target.value)} />
-          </Field>
-          <Field
-            label="% desperdício"
-            hint={
-              <InfoTooltip>
-                Quebra inevitável no corte e enfesto — geralmente entre 5% e 15%. O custo real soma esse percentual ao
-                consumo líquido do molde.
-              </InfoTooltip>
-            }
-          >
-            <Input type="number" min="0" step="any" value={draftDesperdicio} onChange={(e) => setDraftDesperdicio(e.target.value)} />
-          </Field>
-          <Button type="button" variant="secondary" onClick={addInsumoLinha} disabled={!compraVigente}>
-            Adicionar
-          </Button>
-        </div>
-        {draftFornecedorId && draftMaterialId && !compraVigente && (
-          <div className="mb-4 text-sm text-destructive">
-            Não há compra registrada para este fornecedor + material. Cadastre uma compra na tela de Insumos primeiro.
-          </div>
-        )}
-        {compraVigente && (
-          <div className="mb-4 text-sm text-muted-foreground">
-            Preço unitário vigente (líquido de imposto): <strong>{formatBRL(compraVigente.preco_unitario_liquido)}</strong>
-          </div>
-        )}
-
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
-              <th className="py-2 pr-4">Material / fornecedor</th>
-              <th className="py-2 pr-4">Consumo</th>
-              <th className="py-2 pr-4">Desperdício</th>
-              <th className="py-2 pr-4">Preço unitário</th>
-              <th className="py-2 pr-4">Custo por peça</th>
-              <th className="py-2 pr-4">Estoque</th>
-              <th className="py-2 pr-4" />
-            </tr>
-          </thead>
-          <tbody>
-            {insumosLinhas.map((l) => {
-              const { falta, necessario, disponivel } = checarEstoque(l.materialId);
-              return (
-                <tr key={l.key} className="border-b border-border/60">
-                  <td className="py-2 pr-4">{l.label}</td>
-                  <td className="py-2 pr-4">{formatNumber(l.consumoQuantidade)}</td>
-                  <td className="py-2 pr-4">{formatNumber(l.desperdicioPct)}%</td>
-                  <td className="py-2 pr-4">{formatBRL(l.precoUnitarioAplicado)}</td>
-                  <td className="py-2 pr-4">{formatBRL(custoInsumoPorPeca(l))}</td>
-                  <td className="py-2 pr-4">
-                    {falta ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-xs font-medium">
-                        Faltam {formatNumber(necessario - disponivel)}m
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">{formatNumber(disponivel)}m disponível</span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <button type="button" className="underline mr-3" onClick={() => iniciarEdicaoInsumo(l)}>
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="text-destructive"
-                      onClick={() => setInsumosLinhas((prev) => prev.filter((x) => x.key !== l.key))}
-                    >
-                      Remover
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {insumosLinhas.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-4 text-center text-muted-foreground">
-                  Nenhum insumo adicionado ainda.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        {insumosLinhas.some((l) => checarEstoque(l.materialId).falta) && (
-          <div className="mt-4 rounded-md bg-destructive/10 text-destructive px-4 py-3 text-sm">
-            Estoque insuficiente para a quantidade produzida em pelo menos um insumo. Você pode comprar mais do mesmo
-            fornecedor, mas lotes diferentes costumam ter variação de cor/tonalidade — vale confirmar antes de
-            aprovar este produto.
-          </div>
-        )}
       </Card>
 
       {/* Produção interna */}

@@ -43,6 +43,8 @@ export function ComboboxMulti({ options, values, onChange, onCreate, placeholder
       const id = await onCreate(nome);
       onChange([...values, id]);
       setQuery("");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Não foi possível criar este item.");
     } finally {
       setCreating(false);
     }

@@ -44,7 +44,7 @@ export const MODELO_PRECIFICACAO_EXPLICACAO: Record<string, string> = {
     "O valor é cobrado integralmente por peça produzida (ex: costura por unidade). Não é dividido — cada peça carrega o custo completo.",
   tempo: "O valor é calculado pelo tempo gasto (minutos) multiplicado pelo custo por minuto do fornecedor.",
   metro_corrido:
-    "Use quando o fornecedor transforma uma matéria-prima sua em outra, cobrando por metro (ex: estamparia em calandra, tingimento de rolo inteiro). É diferente de um acabamento numa peça já cortada — os detalhes da transformação são preenchidos logo abaixo.",
+    "O valor é cobrado por metro linear (ex: estamparia em calandra, tingimento de rolo inteiro). Pode ou não ser um beneficiamento — o sistema pergunta em seguida.",
 };
 
 export const MOVIMENTO_LABELS: Record<string, string> = {
