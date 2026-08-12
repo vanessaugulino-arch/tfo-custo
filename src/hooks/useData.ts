@@ -757,6 +757,29 @@ export function useMateriaisPorFornecedor(fornecedorId: string | null) {
   });
 }
 
+export function useFornecedoresPorMaterial(materialId: string | null) {
+  return useQuery({
+    queryKey: ["fornecedores_por_material", materialId],
+    enabled: !!materialId,
+    queryFn: async (): Promise<Tables["fornecedores"]["Row"][]> => {
+      const { data, error } = await supabase
+        .from("compras_insumo")
+        .select("fornecedor:fornecedores(*)")
+        .eq("material_id", materialId!);
+      if (error) throw error;
+      const vistos = new Set<string>();
+      const fornecedores: Tables["fornecedores"]["Row"][] = [];
+      for (const row of (data ?? []) as any[]) {
+        if (row.fornecedor && !vistos.has(row.fornecedor.id)) {
+          vistos.add(row.fornecedor.id);
+          fornecedores.push(row.fornecedor);
+        }
+      }
+      return fornecedores;
+    },
+  });
+}
+
 /** Quantos produtos já usam cada serviço — um serviço em uso não pode mais ser editado (só excluído, se possível). */
 export function useServicoFornecedorUsoCount() {
   return useQuery({

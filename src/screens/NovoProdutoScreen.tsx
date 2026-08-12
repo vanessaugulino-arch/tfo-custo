@@ -15,6 +15,7 @@ import {
   useCreateProdutoCompleto,
   useEstoqueAtual,
   useFornecedores,
+  useFornecedoresPorMaterial,
   useGetOrCreateServicoEngajamento,
   useMateriais,
   usePerfilNegocio,
@@ -160,6 +161,7 @@ export function NovoProdutoScreen() {
   const [draftConsumo, setDraftConsumo] = useState("");
   const [draftDesperdicio, setDraftDesperdicio] = useState("0");
   const { data: compraVigente } = useUltimaCompraPorFornecedorMaterial(draftFornecedorId, draftMaterialId);
+  const { data: fornecedoresDoMaterial = [] } = useFornecedoresPorMaterial(draftMaterialId);
 
   const custoServicosEInsumos = useMemo(
     () => custoTotalProduto(servicosLinhas, insumosLinhas),
@@ -446,16 +448,23 @@ export function NovoProdutoScreen() {
             <Combobox
               options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
               value={draftMaterialId}
-              onChange={setDraftMaterialId}
+              onChange={(v) => {
+                setDraftMaterialId(v);
+                setDraftFornecedorId(null);
+              }}
               placeholder="Selecionar material..."
             />
           </Field>
-          <Field label="Fornecedor">
+          <Field
+            label="Fornecedor"
+            hint={<InfoTooltip>Só mostra fornecedores que já têm compra registrada deste material na tela de Insumos.</InfoTooltip>}
+          >
             <Combobox
-              options={fornecedores.map((f) => ({ id: f.id, label: f.nome }))}
+              options={fornecedoresDoMaterial.map((f) => ({ id: f.id, label: f.nome }))}
               value={draftFornecedorId}
               onChange={setDraftFornecedorId}
-              placeholder="Selecionar fornecedor..."
+              disabled={!draftMaterialId}
+              placeholder={draftMaterialId ? "Selecionar fornecedor..." : "Selecione o material primeiro"}
             />
           </Field>
           <Field
