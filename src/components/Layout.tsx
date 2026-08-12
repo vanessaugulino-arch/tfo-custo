@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { usePerfilNegocio } from "@/hooks/useData";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 
 const NAV_ITEMS = [
@@ -12,6 +13,11 @@ const NAV_ITEMS = [
 
 export function Layout() {
   const { user, signOut } = useAuth();
+  const { data: perfil } = usePerfilNegocio(user?.id);
+  const mostrarProducaoInterna = perfil?.modelo_producao === "propria" || perfil?.modelo_producao === "misto";
+  const navItems = mostrarProducaoInterna
+    ? [...NAV_ITEMS, { to: "/producao-interna", label: "Produção interna" }]
+    : NAV_ITEMS;
 
   return (
     <div className="min-h-screen flex">
@@ -21,7 +27,7 @@ export function Layout() {
           <div className="text-xs text-sidebar-foreground/60">Custo de produto</div>
         </div>
         <nav className="flex flex-col gap-1 flex-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

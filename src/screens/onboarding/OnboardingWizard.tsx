@@ -17,8 +17,6 @@ const SEGMENTOS: { grupo: string; itens: string[] }[] = [
 const FATURAMENTOS = ["Até R$ 20 mil/mês", "R$ 20 mil – R$ 100 mil/mês", "R$ 100 mil – R$ 500 mil/mês", "Acima de R$ 500 mil/mês"];
 const ESTAGIOS = ["Validando a primeira coleção", "Vendendo com recorrência", "Escalando a produção", "Operação madura"];
 
-const TOTAL_ETAPAS = 5;
-
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -29,6 +27,7 @@ function capitalize(s: string) {
 
 interface OnboardingLayoutProps {
   etapaAtual: number;
+  totalEtapas: number;
   tituloDestaque: string;
   descricaoDireita?: string;
   children: ReactNode;
@@ -43,6 +42,7 @@ interface OnboardingLayoutProps {
 
 function OnboardingLayout({
   etapaAtual,
+  totalEtapas,
   tituloDestaque,
   descricaoDireita,
   children,
@@ -72,13 +72,13 @@ function OnboardingLayout({
           <div className="flex items-center justify-between text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2">
             <span>Cadastro inicial</span>
             <span>
-              {String(etapaAtual).padStart(2, "0")} de {String(TOTAL_ETAPAS).padStart(2, "0")}
+              {String(etapaAtual).padStart(2, "0")} de {String(totalEtapas).padStart(2, "0")}
             </span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
             <div
               className="h-full bg-primary rounded-full transition-all"
-              style={{ width: `${(etapaAtual / TOTAL_ETAPAS) * 100}%` }}
+              style={{ width: `${(etapaAtual / totalEtapas) * 100}%` }}
             />
           </div>
         </div>
@@ -198,30 +198,45 @@ function RadioCard({
 
 type Rascunho = Partial<PerfilNegocio>;
 
+type EtapaKey = "marca" | "negocio" | "como_funciona" | "producao_interna" | "regime" | "final";
+
 export function OnboardingWizard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: perfilExistente } = usePerfilNegocio(user?.id);
   const salvar = useSalvarPerfilNegocio();
 
-  const [etapa, setEtapa] = useState(1);
+  const [etapa, setEtapa] = useState<EtapaKey>("marca");
   const [rascunho, setRascunho] = useState<Rascunho>(() => perfilExistente ?? {});
+
+  const mostrarProducaoInterna = rascunho.modelo_producao === "propria" || rascunho.modelo_producao === "misto";
+  const ordemEtapas: EtapaKey[] = [
+    "marca",
+    "negocio",
+    "como_funciona",
+    ...(mostrarProducaoInterna ? (["producao_interna"] as const) : []),
+    "regime",
+    "final",
+  ];
+  const etapaAtual = ordemEtapas.indexOf(etapa) + 1;
+  const totalEtapas = ordemEtapas.length;
 
   function atualizar<K extends keyof Rascunho>(campo: K, valor: Rascunho[K]) {
     setRascunho((prev) => ({ ...prev, [campo]: valor }));
   }
 
-  async function salvarEAvancar(campos: Rascunho, proximaEtapa: number | null) {
+  async function salvarEAvancar(campos: Rascunho, proximaEtapa: EtapaKey | null) {
     if (!user) return;
     await salvar.mutateAsync({ userId: user.id, ...campos });
     if (proximaEtapa) setEtapa(proximaEtapa);
     else navigate("/insumos");
   }
 
-  if (etapa === 1) {
+  if (etapa === "marca") {
     return (
       <OnboardingLayout
-        etapaAtual={1}
+        etapaAtual={etapaAtual}
+        totalEtapas={totalEtapas}
         tituloDestaque="Conta da sua marca."
         descricaoDireita="Esses dados orientam todas as leituras da plataforma: benchmark de segmento, faixa esperada de margem e mix de coleção."
         painelTitulo="Canal principal"
@@ -243,7 +258,7 @@ export function OnboardingWizard() {
           </div>
         }
         podeContinuar={!!rascunho.nome_marca?.trim() && (rascunho.segmento?.length ?? 0) > 0 && (rascunho.canal_principal?.length ?? 0) > 0}
-        aoContinuar={() => salvarEAvancar(rascunho, 2)}
+        aoContinuar={() => salvarEAvancar(rascunho, "negocio")}
         proximoTexto="Próximo: faturamento, estágio e modelo"
         carregando={salvar.isPending}
       >
@@ -278,10 +293,11 @@ export function OnboardingWizard() {
     );
   }
 
-  if (etapa === 2) {
+  if (etapa === "negocio") {
     return (
       <OnboardingLayout
-        etapaAtual={2}
+        etapaAtual={etapaAtual}
+        totalEtapas={totalEtapas}
         tituloDestaque="Sobre o seu negócio."
         descricaoDireita="Ajuda a calibrar comparações e alertas ao longo da ferramenta."
         painelTitulo="Modelo de produção"
@@ -308,7 +324,7 @@ export function OnboardingWizard() {
           </div>
         }
         podeContinuar={!!rascunho.faturamento_faixa && !!rascunho.estagio && !!rascunho.modelo_producao}
-        aoContinuar={() => salvarEAvancar(rascunho, 3)}
+        aoContinuar={() => salvarEAvancar(rascunho, "como_funciona")}
         proximoTexto="Próximo: como o TFO Custos funciona"
         carregando={salvar.isPending}
       >
@@ -328,7 +344,7 @@ export function OnboardingWizard() {
     );
   }
 
-  if (etapa === 3) {
+  if (etapa === "como_funciona") {
     const passos = [
       { n: 1, titulo: "Insumos", texto: "Cadastre fornecedores e materiais — cada compra vira um preço por metro linear, já líquido de imposto." },
       { n: 2, titulo: "Serviços", texto: "Modelagem, corte, costura... cada fornecedor com seu modelo de cobrança (peça, tempo ou produto)." },
@@ -337,12 +353,13 @@ export function OnboardingWizard() {
     ];
     return (
       <OnboardingLayout
-        etapaAtual={3}
+        etapaAtual={etapaAtual}
+        totalEtapas={totalEtapas}
         tituloDestaque="Como o TFO Custos funciona."
         descricaoDireita="Quatro passos entre o insumo comprado e o custo final da peça."
         podeContinuar
-        aoContinuar={() => salvarEAvancar({}, 4)}
-        proximoTexto="Próximo: regime tributário padrão"
+        aoContinuar={() => salvarEAvancar({}, mostrarProducaoInterna ? "producao_interna" : "regime")}
+        proximoTexto={mostrarProducaoInterna ? "Próximo: produção interna" : "Próximo: regime tributário padrão"}
         carregando={salvar.isPending}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -360,7 +377,55 @@ export function OnboardingWizard() {
     );
   }
 
-  if (etapa === 4) {
+  if (etapa === "producao_interna") {
+    return (
+      <OnboardingLayout
+        etapaAtual={etapaAtual}
+        totalEtapas={totalEtapas}
+        tituloDestaque="Custo da sua produção interna."
+        descricaoDireita="Transforma a folha de pagamento da sua equipe em um custo por peça, para somar ao custo de insumos e serviços terceirizados."
+        podeContinuar
+        aoContinuar={() => salvarEAvancar({}, "regime")}
+        proximoTexto="Próximo: regime tributário padrão"
+        carregando={salvar.isPending}
+      >
+        <div className="rounded-lg border border-border bg-card p-8 max-w-xl">
+          <h3 className="font-serif text-2xl text-foreground mb-3">Como funciona.</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Você marcou que produz {rascunho.modelo_producao === "misto" ? "parte" : "tudo"} internamente — por isso
+            liberamos um menu novo, <strong>"Produção interna"</strong>, com três passos:
+          </p>
+          <div className="flex flex-col gap-3 mb-3">
+            <div className="rounded-md bg-muted p-4">
+              <p className="text-sm font-medium text-foreground mb-1">1. Cadastre os cargos da equipe</p>
+              <p className="text-xs text-muted-foreground">
+                Costureira, cortador, passadeira... com salário, encargos (CLT) e benefícios. O sistema já sugere um %
+                de encargos com base no seu regime tributário — você pode ajustar.
+              </p>
+            </div>
+            <div className="rounded-md bg-muted p-4">
+              <p className="text-sm font-medium text-foreground mb-1">2. Informe a capacidade mensal da equipe</p>
+              <p className="text-xs text-muted-foreground">
+                Um número único: quantas peças a equipe inteira produz por mês em ritmo normal.
+              </p>
+            </div>
+            <div className="rounded-md bg-muted p-4">
+              <p className="text-sm font-medium text-foreground mb-1">3. Use o custo por peça calculado</p>
+              <p className="text-xs text-muted-foreground">
+                Ao lançar um produto novo, você pode incluir esse custo de mão de obra própria — o sistema divide a
+                folha mensal pela capacidade e soma ao custo de insumos e serviços terceirizados.
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Você não precisa preencher isso agora — pode voltar para "Produção interna" no menu quando quiser.
+          </p>
+        </div>
+      </OnboardingLayout>
+    );
+  }
+
+  if (etapa === "regime") {
     const opcoes: { valor: string; descricao: string }[] = [
       { valor: "simples_nacional", descricao: "Sem crédito — o preço pago já é o custo real. Mais comum para micro e pequenas confecções hoje." },
       { valor: "lucro_presumido_real", descricao: "Já dá para recuperar parte do imposto pago no insumo." },
@@ -368,11 +433,12 @@ export function OnboardingWizard() {
     ];
     return (
       <OnboardingLayout
-        etapaAtual={4}
+        etapaAtual={etapaAtual}
+        totalEtapas={totalEtapas}
         tituloDestaque="Regime tributário padrão."
         descricaoDireita="Usado como sugestão inicial ao registrar uma compra de insumo — você pode trocar em cada compra."
         podeContinuar={!!rascunho.regime_tributario_padrao}
-        aoContinuar={() => salvarEAvancar(rascunho, 5)}
+        aoContinuar={() => salvarEAvancar(rascunho, "final")}
         proximoTexto="Última etapa"
         carregando={salvar.isPending}
       >
@@ -396,7 +462,8 @@ export function OnboardingWizard() {
 
   return (
     <OnboardingLayout
-      etapaAtual={5}
+      etapaAtual={etapaAtual}
+      totalEtapas={totalEtapas}
       tituloDestaque="Pronto para começar."
       descricaoDireita="Seu perfil fica em Configurações — pode ajustar quando quiser."
       podeContinuar

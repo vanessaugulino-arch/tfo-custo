@@ -42,6 +42,89 @@ export function useSalvarPerfilNegocio() {
 }
 
 // ---------------------------------------------------------------------------
+// Produção interna (cargos, folha e capacidade)
+// ---------------------------------------------------------------------------
+
+export type CargoProducaoRow = Tables["cargos_producao"]["Row"];
+
+export function useCargosProducao() {
+  return useQuery({
+    queryKey: ["cargos_producao"],
+    queryFn: async (): Promise<CargoProducaoRow[]> => {
+      const { data, error } = await supabase
+        .from("cargos_producao")
+        .select("*")
+        .eq("ativo", true)
+        .order("criado_em", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+interface NovoCargoProducao {
+  nome: string;
+  salarioBase: number;
+  encargosPct: number;
+  beneficiosMensal: number;
+  quantidadePessoas: number;
+}
+
+export function useCreateCargo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: NovoCargoProducao) => {
+      const { data, error } = await supabase
+        .from("cargos_producao")
+        .insert({
+          nome: input.nome,
+          salario_base: input.salarioBase,
+          encargos_pct: input.encargosPct,
+          beneficios_mensal: input.beneficiosMensal,
+          quantidade_pessoas: input.quantidadePessoas,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cargos_producao"] }),
+  });
+}
+
+export function useUpdateCargo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string } & Partial<NovoCargoProducao>) => {
+      const { id, ...resto } = input;
+      const { error } = await supabase
+        .from("cargos_producao")
+        .update({
+          ...(resto.nome !== undefined && { nome: resto.nome }),
+          ...(resto.salarioBase !== undefined && { salario_base: resto.salarioBase }),
+          ...(resto.encargosPct !== undefined && { encargos_pct: resto.encargosPct }),
+          ...(resto.beneficiosMensal !== undefined && { beneficios_mensal: resto.beneficiosMensal }),
+          ...(resto.quantidadePessoas !== undefined && { quantidade_pessoas: resto.quantidadePessoas }),
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cargos_producao"] }),
+  });
+}
+
+export function useRemoverCargo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("cargos_producao").update({ ativo: false }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cargos_producao"] }),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Catálogos simples (fornecedores, materiais, categorias, serviços)
 // ---------------------------------------------------------------------------
 
@@ -149,9 +232,12 @@ export function useCreateServico() {
 // Serviço por fornecedor (modelo de precificação + categorias atendidas)
 // ---------------------------------------------------------------------------
 
+export type ModeloPrecificacaoServico = "colecao" | "peca_desenvolvida" | "peca_produzida" | "tempo";
+
 export type ServicoFornecedorCompleto = Tables["servico_fornecedor"]["Row"] & {
   fornecedor: Tables["fornecedores"]["Row"];
   servico: Tables["servicos"]["Row"];
+  colecao: Tables["colecoes"]["Row"] | null;
   categorias: Tables["categorias_produto"]["Row"][];
 };
 
@@ -162,7 +248,7 @@ export function useServicosFornecedor() {
       const { data, error } = await supabase
         .from("servico_fornecedor")
         .select(
-          "*, fornecedor:fornecedores(*), servico:servicos(*), servico_fornecedor_categoria(categoria:categorias_produto(*))",
+          "*, fornecedor:fornecedores(*), servico:servicos(*), colecao:colecoes(*), servico_fornecedor_categoria(categoria:categorias_produto(*))",
         )
         .order("criado_em", { ascending: false });
       if (error) throw error;
@@ -177,8 +263,10 @@ export function useServicosFornecedor() {
 interface NovoServicoFornecedor {
   fornecedorId: string;
   servicoId: string;
-  modeloPrecificacao: "peca" | "tempo" | "produto";
+  modeloPrecificacao: ModeloPrecificacaoServico;
   custoPorMinuto: number | null;
+  colecaoId: string | null;
+  beneficiamento: boolean;
   categoriaIds: string[];
 }
 
@@ -193,6 +281,8 @@ export function useCreateServicoFornecedor() {
           servico_id: input.servicoId,
           modelo_precificacao: input.modeloPrecificacao,
           custo_por_minuto: input.custoPorMinuto,
+          colecao_id: input.colecaoId,
+          beneficiamento: input.beneficiamento,
         })
         .select()
         .single();
@@ -210,6 +300,263 @@ export function useCreateServicoFornecedor() {
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_fornecedor"] }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Engajamento de serviço pooled (por coleção / por peça desenvolvida)
+// ---------------------------------------------------------------------------
+
+export type ServicoEngajamento = Tables["servico_engajamento"]["Row"];
+
+export function useServicoEngajamento(servicoFornecedorId: string | null, colecaoId: string | null) {
+  return useQuery({
+    queryKey: ["servico_engajamento", servicoFornecedorId, colecaoId],
+    enabled: !!servicoFornecedorId && !!colecaoId,
+    queryFn: async (): Promise<ServicoEngajamento | null> => {
+      const { data, error } = await supabase
+        .from("servico_engajamento")
+        .select("*")
+        .eq("servico_fornecedor_id", servicoFornecedorId!)
+        .eq("colecao_id", colecaoId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/** Busca o engajamento pooled já existente para (serviço, coleção) ou cria um novo com o valor total informado. */
+export function useGetOrCreateServicoEngajamento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { servicoFornecedorId: string; colecaoId: string; valorTotalSeNovo: number }) => {
+      const { data: existente, error: eBusca } = await supabase
+        .from("servico_engajamento")
+        .select("*")
+        .eq("servico_fornecedor_id", input.servicoFornecedorId)
+        .eq("colecao_id", input.colecaoId)
+        .maybeSingle();
+      if (eBusca) throw eBusca;
+      if (existente) return existente;
+
+      const { data, error } = await supabase
+        .from("servico_engajamento")
+        .insert({
+          servico_fornecedor_id: input.servicoFornecedorId,
+          colecao_id: input.colecaoId,
+          valor_total: input.valorTotalSeNovo,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_engajamento"] }),
+  });
+}
+
+export function useAtualizarValorEngajamento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; valorTotal: number }) => {
+      const { error } = await supabase
+        .from("servico_engajamento")
+        .update({ valor_total: input.valorTotal })
+        .eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_engajamento"] }),
+  });
+}
+
+/**
+ * Estimativa provisória do custo por peça de um engajamento pooled — mesma lógica de
+ * `fechar_colecao()`: para modelo "colecao" divide por TODAS as peças da coleção; para
+ * "peca_desenvolvida" divide só pelas peças já vinculadas a este engajamento. Não é o
+ * valor definitivo: ele só é travado quando a coleção é fechada. Função "crua" (sem hook)
+ * para poder ser chamada de dentro de handlers, além de exposta como hook para exibição ao vivo.
+ */
+export async function calcularEstimativaCustoPecaEngajamento(
+  engajamentoId: string,
+  colecaoId: string,
+  modeloPrecificacao: ModeloPrecificacaoServico,
+  quantidadeProdutoAtual: number,
+): Promise<number | null> {
+  const { data: eng, error: e1 } = await supabase
+    .from("servico_engajamento")
+    .select("*")
+    .eq("id", engajamentoId)
+    .single();
+  if (e1) throw e1;
+
+  let denomExistente = 0;
+  if (modeloPrecificacao === "colecao") {
+    const { data, error } = await supabase
+      .from("produtos")
+      .select("quantidade_produzida, status")
+      .eq("colecao_id", colecaoId)
+      .neq("status", "descartado");
+    if (error) throw error;
+    denomExistente = (data ?? []).reduce((s, p) => s + (p.quantidade_produzida ?? 0), 0);
+  } else {
+    const { data, error } = await supabase
+      .from("produto_servicos")
+      .select("produto:produtos(quantidade_produzida, status)")
+      .eq("servico_engajamento_id", engajamentoId);
+    if (error) throw error;
+    denomExistente = (data ?? []).reduce((s: number, l: any) => {
+      if (l.produto && l.produto.status !== "descartado") return s + (l.produto.quantidade_produzida ?? 0);
+      return s;
+    }, 0);
+  }
+  const denom = denomExistente + quantidadeProdutoAtual;
+  return denom > 0 ? eng.valor_total / denom : null;
+}
+
+export function useEstimativaCustoPecaEngajamento(
+  engajamentoId: string | null,
+  colecaoId: string | null,
+  modeloPrecificacao: ModeloPrecificacaoServico | null,
+  quantidadeProdutoAtual: number,
+) {
+  return useQuery({
+    queryKey: ["engajamento_estimativa", engajamentoId, colecaoId, modeloPrecificacao, quantidadeProdutoAtual],
+    enabled: !!engajamentoId && !!colecaoId,
+    queryFn: () =>
+      calcularEstimativaCustoPecaEngajamento(engajamentoId!, colecaoId!, modeloPrecificacao!, quantidadeProdutoAtual),
+  });
+}
+
+export function useFecharColecao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (colecaoId: string) => {
+      const { error } = await supabase.rpc("fechar_colecao", { p_colecao_id: colecaoId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["colecoes"] });
+      qc.invalidateQueries({ queryKey: ["produtos"] });
+      qc.invalidateQueries({ queryKey: ["servico_engajamento"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Beneficiamento (transforma um insumo em outro, com custo somado)
+// ---------------------------------------------------------------------------
+
+export type ServicoBeneficiamentoCompleto = Tables["servico_beneficiamento"]["Row"] & {
+  material_origem: Tables["materiais"]["Row"];
+  material_resultante: Tables["materiais"]["Row"];
+};
+
+export function useBeneficiamentosPorServico(servicoFornecedorId: string | null) {
+  return useQuery({
+    queryKey: ["servico_beneficiamento", servicoFornecedorId],
+    enabled: !!servicoFornecedorId,
+    queryFn: async (): Promise<ServicoBeneficiamentoCompleto[]> => {
+      const { data, error } = await supabase
+        .from("servico_beneficiamento")
+        .select(
+          "*, material_origem:materiais!servico_beneficiamento_material_origem_id_fkey(*), material_resultante:materiais!servico_beneficiamento_material_resultante_id_fkey(*)",
+        )
+        .eq("servico_fornecedor_id", servicoFornecedorId!)
+        .order("criado_em", { ascending: false });
+      if (error) throw error;
+      return data as any;
+    },
+  });
+}
+
+interface NovoBeneficiamento {
+  servicoFornecedorId: string;
+  fornecedorId: string;
+  materialOrigemId: string;
+  compraInsumoOrigemId: string | null;
+  materialResultanteId: string;
+  quantidadeBeneficiada: number;
+  custoOrigemUnitario: number;
+  custoBeneficiamento: number;
+  regimeTributario: string;
+  dataCompra: string;
+}
+
+/**
+ * Registra um beneficiamento: dá baixa no material de origem, e cria uma "compra" do
+ * material resultante com o custo somado (origem + taxa de beneficiamento) dividido pela
+ * quantidade — isso já entra no estoque do material resultante automaticamente.
+ */
+export function useAplicarBeneficiamento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: NovoBeneficiamento) => {
+      const custoTotalResultante = input.custoOrigemUnitario * input.quantidadeBeneficiada + input.custoBeneficiamento;
+
+      const { data: compraResultante, error: eCompra } = await supabase
+        .from("compras_insumo")
+        .insert({
+          fornecedor_id: input.fornecedorId,
+          material_id: input.materialResultanteId,
+          pack_quantidade: 1,
+          quantidade_comprada: input.quantidadeBeneficiada,
+          preco_pago: custoTotalResultante,
+          regime_tributario: input.regimeTributario as any,
+          aliquota_credito_pct: 0,
+          data_compra: input.dataCompra,
+          unidade_compra: "metro" as any,
+          fator_metros_por_unidade: 1,
+        })
+        .select()
+        .single();
+      if (eCompra) throw eCompra;
+
+      try {
+        const { error: eBenef } = await supabase.from("servico_beneficiamento").insert({
+          servico_fornecedor_id: input.servicoFornecedorId,
+          material_origem_id: input.materialOrigemId,
+          material_resultante_id: input.materialResultanteId,
+          compra_insumo_origem_id: input.compraInsumoOrigemId,
+          compra_insumo_resultante_id: compraResultante.id,
+          quantidade_beneficiada: input.quantidadeBeneficiada,
+          custo_beneficiamento: input.custoBeneficiamento,
+        });
+        if (eBenef) throw eBenef;
+
+        const { error: eSaida } = await supabase.from("movimentos_estoque").insert({
+          material_id: input.materialOrigemId,
+          tipo: "saida_beneficiamento",
+          quantidade: -input.quantidadeBeneficiada,
+          referencia_tipo: "servico_beneficiamento",
+          referencia_id: compraResultante.id,
+          observacao: "Baixa automática por beneficiamento (matéria-prima transformada)",
+        });
+        if (eSaida) throw eSaida;
+
+        const { error: eUpdate } = await supabase
+          .from("movimentos_estoque")
+          .update({
+            tipo: "entrada_beneficiamento",
+            observacao: "Entrada automática por beneficiamento (matéria-prima transformada)",
+          })
+          .eq("referencia_tipo", "compra_insumo")
+          .eq("referencia_id", compraResultante.id);
+        if (eUpdate) throw eUpdate;
+      } catch (err) {
+        await supabase.from("movimentos_estoque").delete().eq("referencia_id", compraResultante.id);
+        await supabase.from("compras_insumo").delete().eq("id", compraResultante.id);
+        throw err;
+      }
+
+      return compraResultante;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["compras_insumo"] });
+      qc.invalidateQueries({ queryKey: ["estoque"] });
+      qc.invalidateQueries({ queryKey: ["movimentos_estoque"] });
+      qc.invalidateQueries({ queryKey: ["servico_beneficiamento"] });
+    },
   });
 }
 
@@ -338,6 +685,8 @@ export function useCreateColecao() {
 export type ProdutoCompleto = Tables["produtos"]["Row"] & {
   categoria: Tables["categorias_produto"]["Row"] | null;
   colecao: Tables["colecoes"]["Row"] | null;
+  /** true quando ao menos um serviço deste produto é "por coleção"/"peça desenvolvida" — custo só é definitivo após fechar a coleção. */
+  temCustoPooled: boolean;
 };
 
 export function useProdutos(colecaoId?: string) {
@@ -346,12 +695,15 @@ export function useProdutos(colecaoId?: string) {
     queryFn: async (): Promise<ProdutoCompleto[]> => {
       let query = supabase
         .from("produtos")
-        .select("*, categoria:categorias_produto(*), colecao:colecoes(*)")
+        .select("*, categoria:categorias_produto(*), colecao:colecoes(*), produto_servicos(servico_engajamento_id)")
         .order("criado_em", { ascending: false });
       if (colecaoId) query = query.eq("colecao_id", colecaoId);
       const { data, error } = await query;
       if (error) throw error;
-      return data as any;
+      return (data ?? []).map((row: any) => ({
+        ...row,
+        temCustoPooled: (row.produto_servicos ?? []).some((ps: any) => ps.servico_engajamento_id != null),
+      }));
     },
   });
 }
@@ -465,11 +817,13 @@ export function useUltimoPrecoServico(servicoFornecedorId: string | null, catego
 export interface NovaLinhaServicoProduto {
   servicoFornecedorId: string;
   categoriaProdutoId: string | null;
-  modeloPrecificacao: "peca" | "tempo" | "produto";
+  modeloPrecificacao: ModeloPrecificacaoServico;
+  servicoEngajamentoId: string | null;
   precoUnitario: number | null;
   tempoMinutos: number | null;
   custoPorMinutoAplicado: number | null;
-  valorCalculado: number;
+  /** Null quando pooled (colecao/peca_desenvolvida) e ainda não fechado — custo definitivo só existe após "fechar coleção". */
+  valorCalculado: number | null;
 }
 
 export interface NovaLinhaInsumoProduto {
@@ -486,6 +840,7 @@ export interface NovoProdutoCompleto {
   colecaoId: string | null;
   quantidadeProduzida: number;
   custoTotalUnitario: number;
+  custoProducaoInternaUnitario: number | null;
   servicos: NovaLinhaServicoProduto[];
   insumos: NovaLinhaInsumoProduto[];
 }
@@ -502,6 +857,7 @@ export function useCreateProdutoCompleto() {
           colecao_id: input.colecaoId,
           quantidade_produzida: input.quantidadeProduzida,
           custo_total_unitario: input.custoTotalUnitario,
+          custo_producao_interna_unitario: input.custoProducaoInternaUnitario,
           status: "rascunho",
         })
         .select()
@@ -515,6 +871,7 @@ export function useCreateProdutoCompleto() {
               produto_id: produto.id,
               servico_fornecedor_id: s.servicoFornecedorId,
               categoria_produto_id: s.categoriaProdutoId,
+              servico_engajamento_id: s.servicoEngajamentoId,
               preco_unitario: s.precoUnitario,
               tempo_minutos: s.tempoMinutos,
               custo_por_minuto_aplicado: s.custoPorMinutoAplicado,
@@ -548,6 +905,7 @@ export function useCreateProdutoCompleto() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["produtos"] });
       qc.invalidateQueries({ queryKey: ["servico_ultimo_preco"] });
+      qc.invalidateQueries({ queryKey: ["engajamento_estimativa"] });
     },
   });
 }

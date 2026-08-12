@@ -1,9 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Combobox } from "@/components/Combobox";
 import { InfoTooltip } from "@/components/InfoTooltip";
-import { Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
+import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
+import { Badge, Button, Card, Checkbox, Field, Input, PageTitle, Select } from "@/components/ui";
+import { useAuth } from "@/hooks/useAuth";
 import {
+  calcularEstimativaCustoPecaEngajamento,
+  useCargosProducao,
   useCategorias,
   useColecoes,
   useCreateCategoria,
@@ -11,19 +15,51 @@ import {
   useCreateProdutoCompleto,
   useEstoqueAtual,
   useFornecedores,
+  useGetOrCreateServicoEngajamento,
   useMateriais,
+  usePerfilNegocio,
+  useServicoEngajamento,
   useServicosFornecedor,
   useUltimaCompraPorFornecedorMaterial,
   useUltimoPrecoServico,
+  type ModeloPrecificacaoServico,
   type NovaLinhaInsumoProduto,
   type NovaLinhaServicoProduto,
 } from "@/hooks/useData";
-import { custoInsumoPorPeca, custoServicoPorPeca, custoTotalProduto } from "@/engine/custo";
+import { custoInsumoPorPeca, custoMensalCargo, custoProducaoInternaPorPeca, custoServicoPorPeca, custoTotalProduto } from "@/engine/custo";
 import { formatBRL, formatNumber, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    targetId: "produto-colecao",
+    title: "A coleção define como o custo pooled é dividido",
+    texto:
+      "Se você usar serviços 'por coleção' ou 'por peça desenvolvida', a coleção deste produto é o que define o grupo de peças que vai dividir o custo — escolha com atenção.",
+  },
+  {
+    targetId: "produto-servicos",
+    title: "Serviços pooled aparecem como 'provisório'",
+    texto:
+      "Ao adicionar um serviço 'por coleção' ou 'por peça desenvolvida', o custo mostrado é uma estimativa que muda conforme mais peças usam o mesmo serviço. Ele só fica definitivo quando você 'fecha' a coleção.",
+  },
+  {
+    targetId: "produto-producao-interna",
+    title: "Inclua o custo da sua equipe própria (opcional)",
+    texto:
+      "Se você já cadastrou cargos e capacidade em 'Produção interna', pode incluir aqui o custo de mão de obra própria diluído pela quantidade deste produto.",
+  },
+  {
+    targetId: "produto-total",
+    title: "Custo unitário estimado",
+    texto: "Soma insumos + serviços + produção interna (se incluída). Esse valor é congelado no momento em que você salva o produto.",
+  },
+];
 
 interface ServicoLinhaUI extends NovaLinhaServicoProduto {
   key: string;
   label: string;
+  /** true para modelos "colecao"/"peca_desenvolvida" — o custo mostrado é uma estimativa até a coleção ser fechada. */
+  provisorio: boolean;
 }
 
 interface InsumoLinhaUI extends NovaLinhaInsumoProduto {
@@ -34,15 +70,36 @@ interface InsumoLinhaUI extends NovaLinhaInsumoProduto {
 
 export function NovoProdutoScreen() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { data: perfil } = usePerfilNegocio(user?.id);
   const { data: categorias = [] } = useCategorias();
   const { data: colecoes = [] } = useColecoes();
   const { data: servicosFornecedor = [] } = useServicosFornecedor();
   const { data: fornecedores = [] } = useFornecedores();
   const { data: materiais = [] } = useMateriais();
   const { data: estoqueAtual = [] } = useEstoqueAtual();
+  const { data: cargos = [] } = useCargosProducao();
   const createColecao = useCreateColecao();
   const createCategoria = useCreateCategoria();
   const createProduto = useCreateProdutoCompleto();
+  const getOrCreateEngajamento = useGetOrCreateServicoEngajamento();
+  const tour = useTourAutoShow("novo_produto");
+
+  const temProducaoInterna = perfil?.modelo_producao === "propria" || perfil?.modelo_producao === "misto";
+  const folhaMensalTotal = cargos.reduce(
+    (acc, c) =>
+      acc +
+      custoMensalCargo({
+        salarioBase: c.salario_base,
+        encargosPct: c.encargos_pct,
+        beneficiosMensal: c.beneficios_mensal,
+        quantidadePessoas: c.quantidade_pessoas,
+      }),
+    0,
+  );
+  const capacidadeMensal = perfil?.capacidade_mensal_pecas ?? 0;
+  const [incluirProducaoInterna, setIncluirProducaoInterna] = useState(false);
+  const [ajusteProducaoInternaPct, setAjusteProducaoInternaPct] = useState("0");
 
   const [nome, setNome] = useState("");
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
@@ -52,6 +109,7 @@ export function NovoProdutoScreen() {
   const [colecaoInicio, setColecaoInicio] = useState("");
   const [colecaoFim, setColecaoFim] = useState("");
   const [quantidadeProduzida, setQuantidadeProduzida] = useState("");
+  const quantidadeProduzidaNum = Number(quantidadeProduzida) || 0;
   const [erro, setErro] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
 
@@ -62,12 +120,40 @@ export function NovoProdutoScreen() {
   const [draftServicoFornecedorId, setDraftServicoFornecedorId] = useState<string | null>(null);
   const [draftPrecoUnitario, setDraftPrecoUnitario] = useState("");
   const [draftTempoMinutos, setDraftTempoMinutos] = useState("");
+  const [draftValorTotalEngajamento, setDraftValorTotalEngajamento] = useState("");
 
   const draftServico = servicosFornecedor.find((sf) => sf.id === draftServicoFornecedorId) ?? null;
+  const draftPooled = draftServico?.modelo_precificacao === "colecao" || draftServico?.modelo_precificacao === "peca_desenvolvida";
+  // Para "colecao" a coleção já vem travada no cadastro do serviço; para "peca_desenvolvida" é a coleção deste produto.
+  const draftColecaoEfetivaId = draftServico?.modelo_precificacao === "colecao" ? draftServico.colecao_id : colecaoId;
   const { data: precoSugerido } = useUltimoPrecoServico(
     draftServicoFornecedorId,
-    draftServico?.modelo_precificacao === "produto" ? categoriaId : null,
+    draftServico?.modelo_precificacao === "peca_produzida" ? categoriaId : null,
   );
+  const { data: engajamentoExistente } = useServicoEngajamento(
+    draftPooled ? draftServicoFornecedorId : null,
+    draftPooled ? draftColecaoEfetivaId : null,
+  );
+  const [estimativaEngajamentoExistente, setEstimativaEngajamentoExistente] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    if (engajamentoExistente && draftColecaoEfetivaId && draftServico) {
+      calcularEstimativaCustoPecaEngajamento(
+        engajamentoExistente.id,
+        draftColecaoEfetivaId,
+        draftServico.modelo_precificacao as any,
+        quantidadeProduzidaNum,
+      ).then((v) => {
+        if (!cancelado) setEstimativaEngajamentoExistente(v);
+      });
+    } else {
+      setEstimativaEngajamentoExistente(null);
+    }
+    return () => {
+      cancelado = true;
+    };
+  }, [engajamentoExistente, draftColecaoEfetivaId, draftServico, quantidadeProduzidaNum]);
 
   // --- draft: nova linha de insumo ---
   const [draftFornecedorId, setDraftFornecedorId] = useState<string | null>(null);
@@ -76,12 +162,19 @@ export function NovoProdutoScreen() {
   const [draftDesperdicio, setDraftDesperdicio] = useState("0");
   const { data: compraVigente } = useUltimaCompraPorFornecedorMaterial(draftFornecedorId, draftMaterialId);
 
-  const quantidadeProduzidaNum = Number(quantidadeProduzida) || 0;
-
-  const custoTotal = useMemo(
-    () => custoTotalProduto(servicosLinhas, insumosLinhas, quantidadeProduzidaNum),
-    [servicosLinhas, insumosLinhas, quantidadeProduzidaNum],
+  const custoServicosEInsumos = useMemo(
+    () => custoTotalProduto(servicosLinhas, insumosLinhas),
+    [servicosLinhas, insumosLinhas],
   );
+
+  const resultadoProducaoInterna = custoProducaoInternaPorPeca(
+    folhaMensalTotal,
+    capacidadeMensal,
+    Number(ajusteProducaoInternaPct) || 0,
+    quantidadeProduzidaNum,
+  );
+  const custoProducaoInternaUnitario = incluirProducaoInterna ? resultadoProducaoInterna.custoPorPeca : null;
+  const custoTotal = custoServicosEInsumos + (custoProducaoInternaUnitario ?? 0);
 
   // Necessidade total por material (soma quando o mesmo material aparece em mais de uma linha).
   const necessidadePorMaterial = useMemo(() => {
@@ -113,9 +206,60 @@ export function NovoProdutoScreen() {
     setColecaoFim("");
   }
 
-  function addServicoLinha() {
+  async function addServicoLinha() {
     if (!draftServico) return;
-    const modelo = draftServico.modelo_precificacao as "peca" | "tempo" | "produto";
+    const modelo = draftServico.modelo_precificacao as ModeloPrecificacaoServico;
+    setErro(null);
+
+    if (draftPooled) {
+      if (!draftColecaoEfetivaId) {
+        setErro(
+          modelo === "colecao"
+            ? "Este serviço está preso a outra coleção — escolha essa coleção para o produto, ou cadastre outro serviço."
+            : "Selecione a coleção do produto antes de adicionar um serviço 'por peça desenvolvida'.",
+        );
+        return;
+      }
+      let engajamentoId = engajamentoExistente?.id ?? null;
+      if (!engajamentoId) {
+        const valorTotal = Number(draftValorTotalEngajamento) || 0;
+        if (valorTotal <= 0) {
+          setErro("Informe o valor total combinado com o fornecedor para esta coleção.");
+          return;
+        }
+        const engajamento = await getOrCreateEngajamento.mutateAsync({
+          servicoFornecedorId: draftServico.id,
+          colecaoId: draftColecaoEfetivaId,
+          valorTotalSeNovo: valorTotal,
+        });
+        engajamentoId = engajamento.id;
+      }
+      const estimativa = await calcularEstimativaCustoPecaEngajamento(
+        engajamentoId,
+        draftColecaoEfetivaId,
+        modelo,
+        quantidadeProduzidaNum,
+      );
+
+      const linha: ServicoLinhaUI = {
+        key: crypto.randomUUID(),
+        label: `${draftServico.fornecedor.nome} — ${draftServico.servico.nome} (${MODELO_PRECIFICACAO_LABELS[modelo]})`,
+        servicoFornecedorId: draftServico.id,
+        categoriaProdutoId: categoriaId,
+        modeloPrecificacao: modelo,
+        servicoEngajamentoId: engajamentoId,
+        precoUnitario: null,
+        tempoMinutos: null,
+        custoPorMinutoAplicado: null,
+        valorCalculado: estimativa,
+        provisorio: true,
+      };
+      setServicosLinhas((prev) => [...prev, linha]);
+      setDraftServicoFornecedorId(null);
+      setDraftValorTotalEngajamento("");
+      return;
+    }
+
     const precoUnitario = modelo === "tempo" ? null : Number(draftPrecoUnitario) || 0;
     const tempoMinutos = modelo === "tempo" ? Number(draftTempoMinutos) || 0 : null;
     const custoPorMinutoAplicado = modelo === "tempo" ? draftServico.custo_por_minuto : null;
@@ -128,10 +272,12 @@ export function NovoProdutoScreen() {
       servicoFornecedorId: draftServico.id,
       categoriaProdutoId: categoriaId,
       modeloPrecificacao: modelo,
+      servicoEngajamentoId: null,
       precoUnitario,
       tempoMinutos,
       custoPorMinutoAplicado,
       valorCalculado,
+      provisorio: false,
     };
     setServicosLinhas((prev) => [...prev, linha]);
     setDraftServicoFornecedorId(null);
@@ -188,6 +334,7 @@ export function NovoProdutoScreen() {
       colecaoId,
       quantidadeProduzida: quantidadeProduzidaNum,
       custoTotalUnitario: custoTotal,
+      custoProducaoInternaUnitario,
       servicos: servicosLinhas,
       insumos: insumosLinhas,
     });
@@ -199,7 +346,10 @@ export function NovoProdutoScreen() {
       <Card className="max-w-md">
         <h2 className="text-lg font-semibold mb-2">Produto salvo!</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          O custo foi congelado no momento do salvamento. Aprove ou descarte na tela de Coleções.
+          {servicosLinhas.some((l) => l.provisorio)
+            ? "O custo foi salvo como provisório porque este produto usa serviço(s) por coleção ou peça desenvolvida — o valor definitivo só é travado quando você 'fechar' a coleção, na tela de Coleções."
+            : "O custo foi congelado no momento do salvamento."}{" "}
+          Aprove ou descarte na tela de Coleções.
         </p>
         <div className="flex gap-2">
           <Button onClick={() => navigate("/colecoes")}>Ver coleções</Button>
@@ -213,7 +363,13 @@ export function NovoProdutoScreen() {
 
   return (
     <div className="pb-16">
-      <PageTitle title="Novo produto" subtitle="Monte o custo do produto a partir dos serviços e insumos já cadastrados." />
+      <div className="flex items-start justify-between gap-4">
+        <PageTitle title="Novo produto" subtitle="Monte o custo do produto a partir dos serviços e insumos já cadastrados." />
+        <Button variant="ghost" onClick={tour.abrir}>
+          Tour desta tela
+        </Button>
+      </div>
+      <Tour steps={TOUR_STEPS} aberto={tour.aberto} onFechar={tour.fechar} />
 
       <Card className="mb-6">
         <div className="grid grid-cols-2 gap-4">
@@ -230,7 +386,7 @@ export function NovoProdutoScreen() {
             />
           </Field>
 
-          <Field label="Coleção">
+          <Field label="Coleção" data-tour="produto-colecao">
             {!novaColecao ? (
               <div className="flex gap-2">
                 <Select value={colecaoId ?? ""} onChange={(e) => setColecaoId(e.target.value || null)} className="flex-1">
@@ -277,7 +433,7 @@ export function NovoProdutoScreen() {
       </Card>
 
       {/* Serviços */}
-      <Card className="mb-6">
+      <Card className="mb-6" data-tour="produto-servicos">
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Serviços</h2>
         <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-3 items-end mb-4">
           <Field label="Serviço (fornecedor)">
@@ -291,16 +447,18 @@ export function NovoProdutoScreen() {
                 setDraftServicoFornecedorId(id);
                 setDraftPrecoUnitario("");
                 setDraftTempoMinutos("");
+                setDraftValorTotalEngajamento("");
               }}
               placeholder="Selecionar serviço já cadastrado..."
             />
           </Field>
 
-          {draftServico?.modelo_precificacao === "tempo" ? (
+          {draftServico?.modelo_precificacao === "tempo" && (
             <Field label="Tempo (minutos)">
               <Input type="number" min="0" step="any" value={draftTempoMinutos} onChange={(e) => setDraftTempoMinutos(e.target.value)} />
             </Field>
-          ) : (
+          )}
+          {draftServico?.modelo_precificacao === "peca_produzida" && (
             <Field label="Valor cobrado (R$)">
               <Input
                 type="number"
@@ -312,12 +470,37 @@ export function NovoProdutoScreen() {
               />
             </Field>
           )}
+          {draftPooled && !engajamentoExistente && (
+            <Field
+              label="Valor total combinado (R$)"
+              hint={
+                <InfoTooltip>
+                  Ainda não existe um engajamento deste serviço para esta coleção — informe o valor total combinado com
+                  o fornecedor. Ele será dividido pelas peças da coleção quando ela for "fechada".
+                </InfoTooltip>
+              }
+            >
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                value={draftValorTotalEngajamento}
+                onChange={(e) => setDraftValorTotalEngajamento(e.target.value)}
+                placeholder="ex: 500,00"
+              />
+            </Field>
+          )}
+          {draftPooled && engajamentoExistente && (
+            <div className="text-sm text-muted-foreground">
+              Valor combinado já registrado: <strong>{formatBRL(engajamentoExistente.valor_total)}</strong>
+            </div>
+          )}
 
           <div className="text-sm text-muted-foreground">
             {draftServico?.modelo_precificacao === "tempo" && (
               <span>Custo/min: {formatBRL(draftServico.custo_por_minuto)}</span>
             )}
-            {precoSugerido && draftServico?.modelo_precificacao !== "tempo" && (
+            {precoSugerido && draftServico?.modelo_precificacao === "peca_produzida" && (
               <button
                 type="button"
                 className="underline"
@@ -326,12 +509,44 @@ export function NovoProdutoScreen() {
                 Usar último preço: {formatBRL(precoSugerido.preco_unitario ?? precoSugerido.valor_calculado)}
               </button>
             )}
+            {draftPooled && (
+              <span>
+                Estimativa por peça:{" "}
+                {estimativaEngajamentoExistente !== null
+                  ? formatBRL(estimativaEngajamentoExistente)
+                  : draftValorTotalEngajamento && quantidadeProduzidaNum > 0
+                    ? formatBRL(Number(draftValorTotalEngajamento) / quantidadeProduzidaNum)
+                    : "—"}{" "}
+                <span className="italic">(provisório)</span>
+              </span>
+            )}
           </div>
 
-          <Button type="button" variant="secondary" onClick={addServicoLinha} disabled={!draftServico}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={addServicoLinha}
+            disabled={
+              !draftServico ||
+              (draftServico.modelo_precificacao === "colecao" && draftServico.colecao_id !== colecaoId) ||
+              (draftServico.modelo_precificacao === "peca_desenvolvida" && !colecaoId) ||
+              (draftPooled && !engajamentoExistente && !(Number(draftValorTotalEngajamento) > 0))
+            }
+          >
             Adicionar
           </Button>
         </div>
+        {draftServico?.modelo_precificacao === "colecao" && colecaoId && draftServico.colecao_id !== colecaoId && (
+          <div className="mb-4 text-sm text-destructive">
+            Este serviço está preso à coleção "{draftServico.colecao?.nome}" — não pode ser usado num produto de outra
+            coleção.
+          </div>
+        )}
+        {draftServico?.modelo_precificacao === "peca_desenvolvida" && !colecaoId && (
+          <div className="mb-4 text-sm text-destructive">
+            Selecione a coleção do produto acima antes de adicionar este serviço.
+          </div>
+        )}
 
         <table className="w-full text-sm">
           <thead>
@@ -349,12 +564,14 @@ export function NovoProdutoScreen() {
                 <td className="py-2 pr-4">
                   {l.modeloPrecificacao === "tempo"
                     ? `${formatNumber(l.tempoMinutos)} min × ${formatBRL(l.custoPorMinutoAplicado)}`
-                    : formatBRL(l.precoUnitario)}
-                  {l.modeloPrecificacao === "peca" && (
-                    <span className="text-muted-foreground"> (diluído por {formatNumber(quantidadeProduzidaNum)} peças)</span>
-                  )}
+                    : l.provisorio
+                      ? "Dividido entre as peças da coleção"
+                      : formatBRL(l.precoUnitario)}
                 </td>
-                <td className="py-2 pr-4">{formatBRL(custoServicoPorPeca(l, quantidadeProduzidaNum))}</td>
+                <td className="py-2 pr-4">
+                  <span className="mr-2">{formatBRL(custoServicoPorPeca(l))}</span>
+                  {l.provisorio && <Badge tone="muted">provisório</Badge>}
+                </td>
                 <td className="py-2 pr-4">
                   <button
                     type="button"
@@ -495,7 +712,66 @@ export function NovoProdutoScreen() {
         )}
       </Card>
 
-      <Card className="sticky bottom-4 flex items-center justify-between shadow-lg">
+      {/* Produção interna */}
+      {temProducaoInterna && (
+        <Card className="mb-6" data-tour="produto-producao-interna">
+          <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Mão de obra própria</h2>
+          {folhaMensalTotal === 0 || capacidadeMensal === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Cadastre os cargos e a capacidade mensal da sua equipe em "Produção interna" no menu para poder incluir
+              esse custo aqui.
+            </p>
+          ) : (
+            <>
+              <Checkbox
+                label="Incluir custo de produção interna neste produto"
+                checked={incluirProducaoInterna}
+                onChange={setIncluirProducaoInterna}
+                hint={
+                  <InfoTooltip>
+                    Diluí a folha mensal da sua equipe ({formatBRL(folhaMensalTotal)}) pela capacidade mensal (
+                    {formatNumber(capacidadeMensal)} peças) considerando a quantidade que você vai produzir deste
+                    produto. Ajuste em "Produção interna" se quiser mudar cargos ou capacidade.
+                  </InfoTooltip>
+                }
+              />
+              {incluirProducaoInterna && (
+                <div className="mt-4 grid grid-cols-2 gap-4 items-end max-w-lg">
+                  <Field
+                    label="Ajuste de capacidade (%)"
+                    hint={
+                      <InfoTooltip>
+                        Opcional. Positivo simula hora extra, negativo simula absenteísmo — só para este produto, não
+                        altera a capacidade base salva.
+                      </InfoTooltip>
+                    }
+                  >
+                    <Input
+                      type="number"
+                      step="any"
+                      value={ajusteProducaoInternaPct}
+                      onChange={(e) => setAjusteProducaoInternaPct(e.target.value)}
+                      placeholder="0"
+                    />
+                  </Field>
+                  <div className="text-sm text-muted-foreground">
+                    {quantidadeProduzidaNum > 0 && resultadoProducaoInterna.custoPorPeca !== null ? (
+                      <>
+                        Custo por peça: <strong>{formatBRL(resultadoProducaoInterna.custoPorPeca)}</strong> (
+                        {formatNumber(resultadoProducaoInterna.mesesNecessarios)} meses de produção)
+                      </>
+                    ) : (
+                      "Informe a quantidade a ser produzida acima."
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      )}
+
+      <Card className="sticky bottom-4 flex items-center justify-between shadow-lg" data-tour="produto-total">
         <div>
           <div className="text-sm text-muted-foreground">Custo unitário estimado</div>
           <div className="text-2xl font-semibold">{formatBRL(custoTotal)}</div>

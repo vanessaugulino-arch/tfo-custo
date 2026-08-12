@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      cargos_producao: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          beneficios_mensal: number
+          criado_em: string
+          encargos_pct: number
+          id: string
+          nome: string
+          quantidade_pessoas: number
+          salario_base: number
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          beneficios_mensal?: number
+          criado_em?: string
+          encargos_pct?: number
+          id?: string
+          nome: string
+          quantidade_pessoas?: number
+          salario_base?: number
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          beneficios_mensal?: number
+          criado_em?: string
+          encargos_pct?: number
+          id?: string
+          nome?: string
+          quantidade_pessoas?: number
+          salario_base?: number
+        }
+        Relationships: []
+      }
       categorias_produto: {
         Row: {
           criado_em: string
@@ -35,6 +71,7 @@ export type Database = {
       colecoes: {
         Row: {
           criado_em: string
+          fechada_em: string | null
           id: string
           nome: string
           periodo_fim: string | null
@@ -42,6 +79,7 @@ export type Database = {
         }
         Insert: {
           criado_em?: string
+          fechada_em?: string | null
           id?: string
           nome: string
           periodo_fim?: string | null
@@ -49,6 +87,7 @@ export type Database = {
         }
         Update: {
           criado_em?: string
+          fechada_em?: string | null
           id?: string
           nome?: string
           periodo_fim?: string | null
@@ -202,6 +241,54 @@ export type Database = {
           },
         ]
       }
+      perfil_negocio: {
+        Row: {
+          atualizado_em: string
+          canal_principal: string[]
+          capacidade_mensal_pecas: number | null
+          criado_em: string
+          estagio: string | null
+          faturamento_faixa: string | null
+          id: string
+          modelo_producao: string | null
+          nome_marca: string | null
+          onboarding_concluido: boolean
+          regime_tributario_padrao: string | null
+          segmento: string[]
+          user_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          canal_principal?: string[]
+          capacidade_mensal_pecas?: number | null
+          criado_em?: string
+          estagio?: string | null
+          faturamento_faixa?: string | null
+          id?: string
+          modelo_producao?: string | null
+          nome_marca?: string | null
+          onboarding_concluido?: boolean
+          regime_tributario_padrao?: string | null
+          segmento?: string[]
+          user_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          canal_principal?: string[]
+          capacidade_mensal_pecas?: number | null
+          criado_em?: string
+          estagio?: string | null
+          faturamento_faixa?: string | null
+          id?: string
+          modelo_producao?: string | null
+          nome_marca?: string | null
+          onboarding_concluido?: boolean
+          regime_tributario_padrao?: string | null
+          segmento?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
       produto_insumos: {
         Row: {
           compra_insumo_id: string
@@ -272,9 +359,10 @@ export type Database = {
           id: string
           preco_unitario: number | null
           produto_id: string
+          servico_engajamento_id: string | null
           servico_fornecedor_id: string
           tempo_minutos: number | null
-          valor_calculado: number
+          valor_calculado: number | null
         }
         Insert: {
           categoria_produto_id?: string | null
@@ -283,9 +371,10 @@ export type Database = {
           id?: string
           preco_unitario?: number | null
           produto_id: string
+          servico_engajamento_id?: string | null
           servico_fornecedor_id: string
           tempo_minutos?: number | null
-          valor_calculado: number
+          valor_calculado?: number | null
         }
         Update: {
           categoria_produto_id?: string | null
@@ -294,9 +383,10 @@ export type Database = {
           id?: string
           preco_unitario?: number | null
           produto_id?: string
+          servico_engajamento_id?: string | null
           servico_fornecedor_id?: string
           tempo_minutos?: number | null
-          valor_calculado?: number
+          valor_calculado?: number | null
         }
         Relationships: [
           {
@@ -314,6 +404,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "produto_servicos_servico_engajamento_id_fkey"
+            columns: ["servico_engajamento_id"]
+            isOneToOne: false
+            referencedRelation: "servico_engajamento"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "produto_servicos_servico_fornecedor_id_fkey"
             columns: ["servico_fornecedor_id"]
             isOneToOne: false
@@ -328,6 +425,7 @@ export type Database = {
           categoria_produto_id: string | null
           colecao_id: string | null
           criado_em: string
+          custo_producao_interna_unitario: number | null
           custo_total_unitario: number | null
           id: string
           nome: string
@@ -339,6 +437,7 @@ export type Database = {
           categoria_produto_id?: string | null
           colecao_id?: string | null
           criado_em?: string
+          custo_producao_interna_unitario?: number | null
           custo_total_unitario?: number | null
           id?: string
           nome: string
@@ -350,6 +449,7 @@ export type Database = {
           categoria_produto_id?: string | null
           colecao_id?: string | null
           criado_em?: string
+          custo_producao_interna_unitario?: number | null
           custo_total_unitario?: number | null
           id?: string
           nome?: string
@@ -373,8 +473,155 @@ export type Database = {
           },
         ]
       }
+      servico_beneficiamento: {
+        Row: {
+          compra_insumo_origem_id: string | null
+          compra_insumo_resultante_id: string
+          criado_em: string
+          custo_beneficiamento: number
+          id: string
+          material_origem_id: string
+          material_resultante_id: string
+          quantidade_beneficiada: number
+          servico_fornecedor_id: string
+        }
+        Insert: {
+          compra_insumo_origem_id?: string | null
+          compra_insumo_resultante_id: string
+          criado_em?: string
+          custo_beneficiamento: number
+          id?: string
+          material_origem_id: string
+          material_resultante_id: string
+          quantidade_beneficiada: number
+          servico_fornecedor_id: string
+        }
+        Update: {
+          compra_insumo_origem_id?: string | null
+          compra_insumo_resultante_id?: string
+          criado_em?: string
+          custo_beneficiamento?: number
+          id?: string
+          material_origem_id?: string
+          material_resultante_id?: string
+          quantidade_beneficiada?: number
+          servico_fornecedor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servico_beneficiamento_compra_insumo_origem_id_fkey"
+            columns: ["compra_insumo_origem_id"]
+            isOneToOne: false
+            referencedRelation: "compras_insumo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_compra_insumo_origem_id_fkey"
+            columns: ["compra_insumo_origem_id"]
+            isOneToOne: false
+            referencedRelation: "compras_insumo_precos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_compra_insumo_origem_id_fkey"
+            columns: ["compra_insumo_origem_id"]
+            isOneToOne: false
+            referencedRelation: "ultima_compra_material"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_compra_insumo_resultante_id_fkey"
+            columns: ["compra_insumo_resultante_id"]
+            isOneToOne: false
+            referencedRelation: "compras_insumo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_compra_insumo_resultante_id_fkey"
+            columns: ["compra_insumo_resultante_id"]
+            isOneToOne: false
+            referencedRelation: "compras_insumo_precos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_compra_insumo_resultante_id_fkey"
+            columns: ["compra_insumo_resultante_id"]
+            isOneToOne: false
+            referencedRelation: "ultima_compra_material"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_material_origem_id_fkey"
+            columns: ["material_origem_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_material_resultante_id_fkey"
+            columns: ["material_resultante_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_beneficiamento_servico_fornecedor_id_fkey"
+            columns: ["servico_fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "servico_fornecedor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      servico_engajamento: {
+        Row: {
+          atualizado_em: string
+          colecao_id: string
+          criado_em: string
+          custo_por_peca_resolvido: number | null
+          id: string
+          servico_fornecedor_id: string
+          valor_total: number
+        }
+        Insert: {
+          atualizado_em?: string
+          colecao_id: string
+          criado_em?: string
+          custo_por_peca_resolvido?: number | null
+          id?: string
+          servico_fornecedor_id: string
+          valor_total: number
+        }
+        Update: {
+          atualizado_em?: string
+          colecao_id?: string
+          criado_em?: string
+          custo_por_peca_resolvido?: number | null
+          id?: string
+          servico_fornecedor_id?: string
+          valor_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servico_engajamento_colecao_id_fkey"
+            columns: ["colecao_id"]
+            isOneToOne: false
+            referencedRelation: "colecoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servico_engajamento_servico_fornecedor_id_fkey"
+            columns: ["servico_fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "servico_fornecedor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       servico_fornecedor: {
         Row: {
+          beneficiamento: boolean
+          colecao_id: string | null
           criado_em: string
           custo_por_minuto: number | null
           fornecedor_id: string
@@ -383,6 +630,8 @@ export type Database = {
           servico_id: string
         }
         Insert: {
+          beneficiamento?: boolean
+          colecao_id?: string | null
           criado_em?: string
           custo_por_minuto?: number | null
           fornecedor_id: string
@@ -391,6 +640,8 @@ export type Database = {
           servico_id: string
         }
         Update: {
+          beneficiamento?: boolean
+          colecao_id?: string | null
           criado_em?: string
           custo_por_minuto?: number | null
           fornecedor_id?: string
@@ -399,6 +650,13 @@ export type Database = {
           servico_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "servico_fornecedor_colecao_id_fkey"
+            columns: ["colecao_id"]
+            isOneToOne: false
+            referencedRelation: "colecoes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "servico_fornecedor_fornecedor_id_fkey"
             columns: ["fornecedor_id"]
@@ -463,51 +721,6 @@ export type Database = {
           criado_em?: string
           id?: string
           nome?: string
-        }
-        Relationships: []
-      }
-      perfil_negocio: {
-        Row: {
-          atualizado_em: string
-          canal_principal: string[]
-          criado_em: string
-          estagio: string | null
-          faturamento_faixa: string | null
-          id: string
-          modelo_producao: string | null
-          nome_marca: string | null
-          onboarding_concluido: boolean
-          regime_tributario_padrao: string | null
-          segmento: string[]
-          user_id: string
-        }
-        Insert: {
-          atualizado_em?: string
-          canal_principal?: string[]
-          criado_em?: string
-          estagio?: string | null
-          faturamento_faixa?: string | null
-          id?: string
-          modelo_producao?: string | null
-          nome_marca?: string | null
-          onboarding_concluido?: boolean
-          regime_tributario_padrao?: string | null
-          segmento?: string[]
-          user_id: string
-        }
-        Update: {
-          atualizado_em?: string
-          canal_principal?: string[]
-          criado_em?: string
-          estagio?: string | null
-          faturamento_faixa?: string | null
-          id?: string
-          modelo_producao?: string | null
-          nome_marca?: string | null
-          onboarding_concluido?: boolean
-          regime_tributario_padrao?: string | null
-          segmento?: string[]
-          user_id?: string
         }
         Relationships: []
       }
@@ -706,7 +919,7 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      fechar_colecao: { Args: { p_colecao_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
@@ -833,3 +1046,9 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const

@@ -1,8 +1,18 @@
+export type ModeloPrecificacaoServico = "colecao" | "peca_desenvolvida" | "peca_produzida" | "tempo";
+
 export interface ServicoLinha {
-  modeloPrecificacao: "peca" | "tempo" | "produto";
+  modeloPrecificacao: ModeloPrecificacaoServico;
+  /** Usado em "peca_produzida": valor cobrado integralmente por peça, sem diluição. */
   precoUnitario: number | null;
+  /** Usado em "tempo". */
   tempoMinutos: number | null;
   custoPorMinutoAplicado: number | null;
+  /**
+   * Usado em "colecao" e "peca_desenvolvida": custo por peça já resolvido (provisório, via
+   * estimativa ao vivo, ou definitivo, após "fechar coleção") — a diluição pelo pool de peças
+   * acontece fora daqui (servico_engajamento / fechar_colecao()), nunca aqui.
+   */
+  valorCalculado: number | null;
 }
 
 export interface InsumoLinha {
@@ -11,47 +21,70 @@ export interface InsumoLinha {
   precoUnitarioAplicado: number;
 }
 
-/** Contribuição de UM serviço ao custo de UMA peça (antes de diluir por quantidade produzida, no caso de "peça"). */
+/** Contribuição de UM serviço ao custo de UMA peça. */
 export function calcularValorServico(linha: ServicoLinha): number {
   if (linha.modeloPrecificacao === "tempo") {
     return (linha.tempoMinutos ?? 0) * (linha.custoPorMinutoAplicado ?? 0);
   }
-  // "peca" e "produto" partem de um preço unitário informado/aceito.
-  return linha.precoUnitario ?? 0;
+  if (linha.modeloPrecificacao === "peca_produzida") {
+    return linha.precoUnitario ?? 0;
+  }
+  return linha.valorCalculado ?? 0;
 }
 
-/**
- * Custo por peça de um serviço já lançado.
- * "peca" (peça desenvolvida) é um valor fixo total que se dilui pela quantidade produzida.
- * "tempo" e "produto" já são custo por peça produzida, não diluem.
- */
-export function custoServicoPorPeca(
-  linha: ServicoLinha,
-  quantidadeProduzida: number,
-): number {
-  const valor = calcularValorServico(linha);
-  if (linha.modeloPrecificacao === "peca") {
-    if (!quantidadeProduzida || quantidadeProduzida <= 0) return 0;
-    return valor / quantidadeProduzida;
-  }
-  return valor;
+/** Custo por peça de um serviço já lançado (a diluição pooled já vem resolvida na própria linha). */
+export function custoServicoPorPeca(linha: ServicoLinha): number {
+  return calcularValorServico(linha);
 }
 
 export function custoInsumoPorPeca(linha: InsumoLinha): number {
   return linha.consumoQuantidade * (1 + linha.desperdicioPct / 100) * linha.precoUnitarioAplicado;
 }
 
-export function custoTotalProduto(
-  servicos: ServicoLinha[],
-  insumos: InsumoLinha[],
-  quantidadeProduzida: number,
-): number {
-  const totalServicos = servicos.reduce(
-    (acc, s) => acc + custoServicoPorPeca(s, quantidadeProduzida),
-    0,
-  );
+export function custoTotalProduto(servicos: ServicoLinha[], insumos: InsumoLinha[]): number {
+  const totalServicos = servicos.reduce((acc, s) => acc + custoServicoPorPeca(s), 0);
   const totalInsumos = insumos.reduce((acc, i) => acc + custoInsumoPorPeca(i), 0);
   return totalServicos + totalInsumos;
+}
+
+export interface CargoProducao {
+  salarioBase: number;
+  encargosPct: number;
+  beneficiosMensal: number;
+  quantidadePessoas: number;
+}
+
+/** Custo mensal de um cargo: (salário × (1 + encargos%) + benefícios) × nº de pessoas nesse cargo. */
+export function custoMensalCargo(cargo: CargoProducao): number {
+  return (cargo.salarioBase * (1 + cargo.encargosPct / 100) + cargo.beneficiosMensal) * cargo.quantidadePessoas;
+}
+
+export interface ResultadoCustoProducaoInterna {
+  capacidadeEfetiva: number;
+  mesesNecessarios: number;
+  custoTotalPeriodo: number;
+  custoPorPeca: number | null;
+}
+
+/**
+ * Custo por peça da produção interna: a folha mensal total é diluída pela capacidade mensal
+ * (ajustada por horas extra/absenteísmo, se informado) — o resultado não depende da quantidade em
+ * si (meses necessários × folha ÷ quantidade sempre simplifica para folha ÷ capacidade efetiva),
+ * mas calculamos passo a passo para poder explicar cada etapa ao usuário.
+ */
+export function custoProducaoInternaPorPeca(
+  folhaMensalTotal: number,
+  capacidadeMensalPecas: number,
+  ajustePct: number,
+  quantidade: number,
+): ResultadoCustoProducaoInterna {
+  const capacidadeEfetiva = capacidadeMensalPecas * (1 + ajustePct / 100);
+  if (capacidadeEfetiva <= 0 || quantidade <= 0) {
+    return { capacidadeEfetiva, mesesNecessarios: 0, custoTotalPeriodo: 0, custoPorPeca: null };
+  }
+  const mesesNecessarios = quantidade / capacidadeEfetiva;
+  const custoTotalPeriodo = folhaMensalTotal * mesesNecessarios;
+  return { capacidadeEfetiva, mesesNecessarios, custoTotalPeriodo, custoPorPeca: custoTotalPeriodo / quantidade };
 }
 
 /** Preço líquido de imposto do insumo, conforme regime tributário da compra. */

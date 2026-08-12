@@ -1,8 +1,8 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, LabelHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, LabelHTMLAttributes, ReactNode } from "react";
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Card({ children, className = "", ...rest }: { children: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`rounded-xl border border-border bg-card text-card-foreground p-5 ${className}`}>
+    <div {...rest} className={`rounded-xl border border-border bg-card text-card-foreground p-5 ${className}`}>
       {children}
     </div>
   );
@@ -17,9 +17,14 @@ export function PageTitle({ title, subtitle }: { title: string; subtitle?: strin
   );
 }
 
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
+export function Field({
+  label,
+  children,
+  hint,
+  ...rest
+}: { label: string; children: ReactNode; hint?: ReactNode } & LabelHTMLAttributes<HTMLLabelElement>) {
   return (
-    <label className="flex flex-col gap-1.5 text-sm">
+    <label {...rest} className={`flex flex-col gap-1.5 text-sm ${rest.className ?? ""}`}>
       <span className="font-medium text-foreground flex items-center gap-1.5">
         {label}
         {hint}
@@ -78,4 +83,31 @@ export function Badge({ children, tone = "default" }: { children: ReactNode; ton
 
 export function ExtraLabel(props: LabelHTMLAttributes<HTMLLabelElement>) {
   return <label {...props} className={`text-xs text-muted-foreground ${props.className ?? ""}`} />;
+}
+
+export function Checkbox({
+  label,
+  checked,
+  onChange,
+  hint,
+}: {
+  label: ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  hint?: ReactNode;
+}) {
+  return (
+    <label className="flex items-start gap-2 text-sm cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-border text-secondary focus:ring-secondary"
+      />
+      <span className="flex items-center gap-1.5 font-medium text-foreground">
+        {label}
+        {hint}
+      </span>
+    </label>
+  );
 }
