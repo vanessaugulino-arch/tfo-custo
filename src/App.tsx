@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePerfilNegocio } from "@/hooks/useData";
 import { LoginScreen } from "@/screens/LoginScreen";
 import { OnboardingWizard } from "@/screens/onboarding/OnboardingWizard";
+import { InicioScreen } from "@/screens/InicioScreen";
 import { InsumosScreen } from "@/screens/InsumosScreen";
 import { ServicosScreen } from "@/screens/ServicosScreen";
 import { NovoProdutoScreen } from "@/screens/NovoProdutoScreen";
@@ -30,14 +31,15 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/insumos" replace />} />
+        <Route index element={<InicioScreen />} />
+        <Route path="/inicio" element={<InicioScreen />} />
         <Route path="/insumos" element={<InsumosScreen />} />
         <Route path="/servicos" element={<ServicosScreen />} />
         <Route path="/produtos/novo" element={<NovoProdutoScreen />} />
         <Route path="/colecoes" element={<ColecoesScreen />} />
         <Route path="/estoque" element={<EstoqueScreen />} />
         <Route path="/producao-interna" element={<ProducaoInternaScreen />} />
-        <Route path="*" element={<Navigate to="/insumos" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );

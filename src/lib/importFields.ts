@@ -20,6 +20,7 @@ export const MODELO_INSUMOS: ModeloImport = {
   campos: [
     { id: "fornecedor", label: "Fornecedor", tipo: "texto", obrigatorio: true, keywords: ["fornecedor", "supplier"], explicacao: "Nome do fornecedor. Se não existir ainda, é criado automaticamente." },
     { id: "material", label: "Material / insumo", tipo: "texto", obrigatorio: true, keywords: ["material", "insumo", "mp", "matéria", "materia"], explicacao: "Nome do material ou matéria-prima. Se não existir, é criado automaticamente." },
+    { id: "cor", label: "Cor", tipo: "texto", obrigatorio: false, keywords: ["cor", "color", "cores"], explicacao: "Opcional — use quando tiver o mesmo material em cores diferentes (ex: 'Algodão cru' verde e cinza são tratados como materiais separados)." },
     { id: "pack", label: "Pack", tipo: "numerico", obrigatorio: true, keywords: ["pack", "embalagem", "rolo", "volume"], explicacao: "A cada quantos metros/unidades o fornecedor vende este material." },
     { id: "quantidade_comprada", label: "Quantidade comprada", tipo: "numerico", obrigatorio: true, keywords: ["quantidade", "qtd", "comprada"], explicacao: "Quantidade total comprada nesta nota/lote, na unidade de compra (metro, kg ou peça)." },
     { id: "preco_pago", label: "Preço pago (R$)", tipo: "monetario", obrigatorio: true, keywords: ["preco", "preço", "valor", "pago", "total"], explicacao: "Valor total pago pelo lote (não o valor unitário)." },
@@ -28,7 +29,7 @@ export const MODELO_INSUMOS: ModeloImport = {
     { id: "regime_tributario", label: "Regime tributário", tipo: "texto", obrigatorio: false, keywords: ["regime", "tributário", "tributario", "imposto"], explicacao: "simples_nacional, lucro_presumido_real ou iva_dual_2027. Se ausente, assume Simples Nacional." },
     { id: "data_compra", label: "Data da compra", tipo: "data", obrigatorio: false, keywords: ["data", "compra"], explicacao: "Data da compra. Se ausente, usa a data de hoje." },
   ],
-  linhaExemplo: ["Fornecedor XYZ", "Elástico 3cm", "25", "100", "350.00", "metro", "1", "simples_nacional", "2026-08-01"],
+  linhaExemplo: ["Fornecedor XYZ", "Elástico 3cm", "", "25", "100", "350.00", "metro", "1", "simples_nacional", "2026-08-01"],
 };
 
 export const MODELO_SERVICOS: ModeloImport = {
@@ -50,10 +51,11 @@ export const MODELO_ESTOQUE: ModeloImport = {
   label: "Ajustes de estoque",
   campos: [
     { id: "material", label: "Material", tipo: "texto", obrigatorio: true, keywords: ["material", "insumo"], explicacao: "Nome do material. Se não existir, é criado automaticamente." },
+    { id: "cor", label: "Cor", tipo: "texto", obrigatorio: false, keywords: ["cor", "color", "cores"], explicacao: "Opcional — só preencha se esse material tiver variantes de cor cadastradas (ex: 'Algodão cru' verde e cinza são materiais separados)." },
     { id: "quantidade", label: "Quantidade (+ entra / − sai)", tipo: "numerico", obrigatorio: true, keywords: ["quantidade", "saldo", "ajuste"], explicacao: "Positivo para entrada, negativo para saída — ex: ajuste de inventário." },
     { id: "observacao", label: "Observação", tipo: "texto", obrigatorio: false, keywords: ["observação", "observacao", "motivo"], explicacao: "Motivo do ajuste, opcional." },
   ],
-  linhaExemplo: ["Elástico 3cm", "-5", "Inventário mensal"],
+  linhaExemplo: ["Elástico 3cm", "", "-5", "Inventário mensal"],
 };
 
 export function sugerirCampo(nomeColuna: string, campos: CampoImport[]): string {

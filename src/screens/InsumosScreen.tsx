@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Combobox } from "@/components/Combobox";
 import { ImportModal, type ResultadoImport } from "@/components/ImportModal";
 import { InfoTooltip } from "@/components/InfoTooltip";
+import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
 import { Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -9,19 +10,48 @@ import {
   useCreateCompraInsumo,
   useCreateFornecedor,
   useCreateMaterial,
+  useDeleteCompraInsumo,
   useFornecedores,
   useMateriais,
   usePerfilNegocio,
+  useUpdateCompraInsumo,
+  useUpdateMaterial,
+  type CompraInsumoCompleta,
 } from "@/hooks/useData";
 import { findOrCreateFornecedor, findOrCreateMaterial, parseNumeroPtBr } from "@/lib/importHelpers";
 import { MODELO_INSUMOS } from "@/lib/importFields";
-import { formatBRL, formatDate, formatNumber, REGIME_LABELS, UNIDADE_COMPRA_LABELS, UNIDADE_COMPRA_SUFIXO } from "@/lib/format";
+import { formatBRL, formatDate, formatNumber, labelMaterial, REGIME_LABELS, UNIDADE_COMPRA_LABELS, UNIDADE_COMPRA_SUFIXO } from "@/lib/format";
 
 const REGIMES = Object.entries(REGIME_LABELS);
 const REGIMES_VALIDOS = new Set(["simples_nacional", "lucro_presumido_real", "iva_dual_2027"]);
 const UNIDADES = Object.entries(UNIDADE_COMPRA_LABELS);
 const UNIDADES_VALIDAS = new Set(["metro", "peso_kg", "rolo", "peca"]);
 const UNIDADES_COM_RENDIMENTO = new Set(["peso_kg", "rolo"]);
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    targetId: "insumos-material",
+    title: "Material e cor juntos identificam o insumo",
+    texto:
+      "Se você compra o mesmo tecido em cores diferentes, cadastre cada cor como um material separado — assim o estoque e o custo de cada cor ficam independentes. A cor aparece ao lado do nome em todas as telas.",
+  },
+  {
+    targetId: "insumos-unidade",
+    title: "Pack e unidade de compra definem a conversão",
+    texto:
+      "Metro e peso convertem para metros lineares; peça não converte (o Pack diz quantas peças por embalagem); rolo usa a metragem de cada rolo. Passe o mouse nos ícones de ajuda para ver exemplos.",
+  },
+  {
+    targetId: "insumos-regime",
+    title: "O regime tributário muda o custo líquido",
+    texto: "Simples Nacional não gera crédito de imposto — o preço pago já é o custo real. Nos outros regimes, uma parte do imposto pago volta como crédito.",
+  },
+  {
+    targetId: "insumos-tabela",
+    title: "Compras registradas",
+    texto: "Cada linha é um lote de compra. Use Editar para corrigir um erro de digitação ou Excluir para remover — o estoque é ajustado automaticamente.",
+  },
+];
 
 export function InsumosScreen() {
   const { user } = useAuth();
@@ -31,8 +61,12 @@ export function InsumosScreen() {
   const { data: compras = [] } = useComprasInsumo();
   const createFornecedor = useCreateFornecedor();
   const createMaterial = useCreateMaterial();
+  const updateMaterial = useUpdateMaterial();
   const createCompra = useCreateCompraInsumo();
+  const updateCompra = useUpdateCompraInsumo();
+  const deleteCompra = useDeleteCompraInsumo();
   const [importAberto, setImportAberto] = useState(false);
+  const tour = useTourAutoShow("insumos");
 
   async function handleImportar(linhas: Record<string, string>[]): Promise<ResultadoImport> {
     let sucesso = 0;
@@ -55,7 +89,7 @@ export function InsumosScreen() {
         }
 
         const fornecedorId = await findOrCreateFornecedor(row.fornecedor);
-        const materialId = await findOrCreateMaterial(row.material);
+        const materialId = await findOrCreateMaterial(row.material, row.cor);
         const regime = row.regime_tributario?.trim().toLowerCase() ?? "";
         await createCompra.mutateAsync({
           fornecedorId,
@@ -77,8 +111,10 @@ export function InsumosScreen() {
     return { sucesso, erros };
   }
 
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [fornecedorId, setFornecedorId] = useState<string | null>(null);
   const [materialId, setMaterialId] = useState<string | null>(null);
+  const [cor, setCor] = useState("");
   const [packQuantidade, setPackQuantidade] = useState("");
   const [unidadeCompra, setUnidadeCompra] = useState<"metro" | "peso_kg" | "rolo" | "peca">("metro");
   const [fatorMetros, setFatorMetros] = useState("");
@@ -97,6 +133,11 @@ export function InsumosScreen() {
       setRegimeInicializado(true);
     }
   }, [perfil, regimeInicializado]);
+
+  function selecionarMaterial(id: string) {
+    setMaterialId(id);
+    setCor(materiais.find((m) => m.id === id)?.cor ?? "");
+  }
 
   const packNum = Number(packQuantidade) || 0;
   const qtdNum = Number(quantidadeComprada) || 0;
@@ -137,12 +178,49 @@ export function InsumosScreen() {
   }
 
   function resetForm() {
+    setFornecedorId(null);
+    setMaterialId(null);
+    setCor("");
     setPackQuantidade("");
     setUnidadeCompra("metro");
     setFatorMetros("");
     setQuantidadeComprada("");
     setPrecoPago("");
     setAliquota("0");
+    setDataCompra(new Date().toISOString().slice(0, 10));
+  }
+
+  function iniciarEdicao(c: CompraInsumoCompleta) {
+    setEditandoId(c.id);
+    setFornecedorId(c.fornecedor_id);
+    setMaterialId(c.material_id);
+    setCor(c.material?.cor ?? "");
+    setPackQuantidade(String(c.pack_quantidade));
+    setUnidadeCompra(c.unidade_compra as any);
+    setFatorMetros(String(c.fator_metros_por_unidade));
+    setQuantidadeComprada(String(c.quantidade_comprada));
+    setPrecoPago(String(c.preco_pago));
+    setRegime(c.regime_tributario);
+    setAliquota(String(c.aliquota_credito_pct));
+    setDataCompra(c.data_compra);
+    setErro(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelarEdicao() {
+    setEditandoId(null);
+    resetForm();
+    setErro(null);
+  }
+
+  async function handleExcluir(id: string) {
+    const ok = window.confirm("Excluir esta compra? O estoque é ajustado de volta. Essa ação não pode ser desfeita.");
+    if (!ok) return;
+    try {
+      await deleteCompra.mutateAsync(id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Não foi possível excluir esta compra.");
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -162,7 +240,8 @@ export function InsumosScreen() {
       );
       return;
     }
-    await createCompra.mutateAsync({
+
+    const payload = {
       fornecedorId,
       materialId,
       packQuantidade: packNum,
@@ -173,8 +252,21 @@ export function InsumosScreen() {
       dataCompra: dataCompra,
       unidadeCompra,
       fatorMetrosPorUnidade: fatorNum,
-    });
-    resetForm();
+    };
+
+    if (editandoId) {
+      await updateCompra.mutateAsync({ id: editandoId, ...payload });
+    } else {
+      await createCompra.mutateAsync(payload);
+    }
+
+    const materialAtual = materiais.find((m) => m.id === materialId);
+    if ((cor.trim() || null) !== (materialAtual?.cor ?? null)) {
+      await updateMaterial.mutateAsync({ id: materialId, cor: cor.trim() || null });
+    }
+
+    if (editandoId) cancelarEdicao();
+    else resetForm();
   }
 
   return (
@@ -184,16 +276,31 @@ export function InsumosScreen() {
           title="Insumos e matérias-primas"
           subtitle="Cada compra registra um lote de preço próprio — o sistema sempre usa o último preço pago por fornecedor + material."
         />
-        <Button variant="secondary" onClick={() => setImportAberto(true)}>
-          Importar planilha
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={tour.abrir}>
+            Tour desta tela
+          </Button>
+          <Button variant="secondary" onClick={() => setImportAberto(true)}>
+            Importar planilha
+          </Button>
+        </div>
       </div>
+
+      <Tour steps={TOUR_STEPS} aberto={tour.aberto} onFechar={tour.fechar} />
 
       {importAberto && (
         <ImportModal modelo={MODELO_INSUMOS} onClose={() => setImportAberto(false)} onConfirmar={handleImportar} />
       )}
 
       <Card className="mb-8">
+        {editandoId && (
+          <div className="mb-4 flex items-center justify-between rounded-md bg-accent px-4 py-2 text-sm text-accent-foreground">
+            Editando compra já registrada.
+            <button type="button" className="underline" onClick={cancelarEdicao}>
+              Cancelar edição
+            </button>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
           <Field label="Fornecedor">
             <Combobox
@@ -204,17 +311,34 @@ export function InsumosScreen() {
               placeholder="Selecionar ou cadastrar fornecedor..."
             />
           </Field>
-          <Field label="Material / insumo">
-            <Combobox
-              options={materiais.map((m) => ({ id: m.id, label: `${m.nome}${m.codigo ? ` (${m.codigo})` : ""}` }))}
-              value={materialId}
-              onChange={setMaterialId}
-              onCreate={async (nome) => (await createMaterial.mutateAsync(nome)).id}
-              placeholder="Selecionar ou cadastrar material..."
-            />
-          </Field>
+          <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-3" data-tour="insumos-material">
+            <Field label="Material / insumo">
+              <Combobox
+                options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
+                value={materialId}
+                onChange={selecionarMaterial}
+                onCreate={async (nome) => {
+                  const criado = await createMaterial.mutateAsync(nome);
+                  selecionarMaterial(criado.id);
+                  return criado.id;
+                }}
+                placeholder="Selecionar ou cadastrar material..."
+              />
+            </Field>
+            <Field
+              label="Cor"
+              hint={
+                <InfoTooltip>
+                  Opcional. Se você tem o mesmo material em cores diferentes (ex: algodão cru verde e cinza), cadastre
+                  cada cor separadamente — elas viram materiais distintos, com estoque e custo próprios.
+                </InfoTooltip>
+              }
+            >
+              <Input value={cor} onChange={(e) => setCor(e.target.value)} placeholder="ex: verde" />
+            </Field>
+          </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3" data-tour="insumos-unidade">
             <Field
               label="Pack"
               hint={
@@ -288,6 +412,7 @@ export function InsumosScreen() {
           )}
           <Field
             label="Regime tributário da compra"
+            data-tour="insumos-regime"
             hint={
               <InfoTooltip>
                 <strong>Simples Nacional:</strong> sem crédito, o preço pago já é o custo real.
@@ -328,15 +453,20 @@ export function InsumosScreen() {
 
           {erro && <div className="col-span-2 text-sm text-destructive">{erro}</div>}
 
-          <div className="col-span-2">
-            <Button type="submit" disabled={createCompra.isPending}>
-              {createCompra.isPending ? "Salvando..." : "Registrar compra"}
+          <div className="col-span-2 flex gap-2">
+            <Button type="submit" disabled={createCompra.isPending || updateCompra.isPending}>
+              {createCompra.isPending || updateCompra.isPending ? "Salvando..." : editandoId ? "Salvar alterações" : "Registrar compra"}
             </Button>
+            {editandoId && (
+              <Button type="button" variant="ghost" onClick={cancelarEdicao}>
+                Cancelar
+              </Button>
+            )}
           </div>
         </form>
       </Card>
 
-      <Card>
+      <Card data-tour="insumos-tabela">
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Compras registradas</h2>
         <div className="overflow-auto">
           <table className="w-full text-sm">
@@ -353,6 +483,7 @@ export function InsumosScreen() {
                 <th className="py-2 pr-4">Unitário bruto</th>
                 <th className="py-2 pr-4">Unitário líquido</th>
                 <th className="py-2 pr-4">Regime</th>
+                <th className="py-2 pr-4" />
               </tr>
             </thead>
             <tbody>
@@ -360,7 +491,7 @@ export function InsumosScreen() {
                 <tr key={c.id} className="border-b border-border/60">
                   <td className="py-2 pr-4">{formatDate(c.data_compra)}</td>
                   <td className="py-2 pr-4">{c.fornecedor?.nome} <span className="text-muted-foreground">({c.fornecedor?.codigo})</span></td>
-                  <td className="py-2 pr-4">{c.material?.nome} <span className="text-muted-foreground">({c.material?.codigo})</span></td>
+                  <td className="py-2 pr-4">{c.material ? labelMaterial(c.material) : ""} <span className="text-muted-foreground">({c.material?.codigo})</span></td>
                   <td className="py-2 pr-4">{formatNumber(c.pack_quantidade)}</td>
                   <td className="py-2 pr-4">{UNIDADE_COMPRA_LABELS[c.unidade_compra] ?? c.unidade_compra}</td>
                   <td className="py-2 pr-4">
@@ -375,11 +506,21 @@ export function InsumosScreen() {
                   <td className="py-2 pr-4">{formatBRL(c.preco_unitario_bruto)}</td>
                   <td className="py-2 pr-4">{formatBRL(c.preco_unitario_liquido)}</td>
                   <td className="py-2 pr-4">{REGIME_LABELS[c.regime_tributario]}</td>
+                  <td className="py-2 pr-4">
+                    <div className="flex gap-3">
+                      <button type="button" className="underline" onClick={() => iniciarEdicao(c)}>
+                        Editar
+                      </button>
+                      <button type="button" className="text-destructive" onClick={() => handleExcluir(c.id)}>
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {compras.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-6 text-center text-muted-foreground">
+                  <td colSpan={12} className="py-6 text-center text-muted-foreground">
                     Nenhuma compra registrada ainda.
                   </td>
                 </tr>

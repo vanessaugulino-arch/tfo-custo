@@ -4,6 +4,7 @@ import { usePerfilNegocio } from "@/hooks/useData";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 
 const NAV_ITEMS = [
+  { to: "/inicio", label: "Início" },
   { to: "/insumos", label: "Insumos" },
   { to: "/servicos", label: "Serviços" },
   { to: "/produtos/novo", label: "Novo produto" },

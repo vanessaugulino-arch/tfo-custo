@@ -178,6 +178,18 @@ export function useCreateMaterial() {
   });
 }
 
+export function useUpdateMaterial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; cor?: string | null; nome?: string }) => {
+      const { id, ...resto } = input;
+      const { error } = await supabase.from("materiais").update(resto).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["materiais"] }),
+  });
+}
+
 export function useCategorias() {
   return useQuery({
     queryKey: ["categorias_produto"],
@@ -298,6 +310,56 @@ export function useCreateServicoFornecedor() {
         if (catError) throw catError;
       }
       return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_fornecedor"] }),
+  });
+}
+
+export function useUpdateServicoFornecedor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string } & Partial<NovoServicoFornecedor>) => {
+      const { id, categoriaIds, ...resto } = input;
+      const { error } = await supabase
+        .from("servico_fornecedor")
+        .update({
+          ...(resto.fornecedorId !== undefined && { fornecedor_id: resto.fornecedorId }),
+          ...(resto.servicoId !== undefined && { servico_id: resto.servicoId }),
+          ...(resto.modeloPrecificacao !== undefined && { modelo_precificacao: resto.modeloPrecificacao }),
+          ...(resto.custoPorMinuto !== undefined && { custo_por_minuto: resto.custoPorMinuto }),
+          ...(resto.colecaoId !== undefined && { colecao_id: resto.colecaoId }),
+          ...(resto.beneficiamento !== undefined && { beneficiamento: resto.beneficiamento }),
+        })
+        .eq("id", id);
+      if (error) throw error;
+
+      if (categoriaIds) {
+        const { error: delError } = await supabase.from("servico_fornecedor_categoria").delete().eq("servico_fornecedor_id", id);
+        if (delError) throw delError;
+        if (categoriaIds.length > 0) {
+          const { error: insError } = await supabase
+            .from("servico_fornecedor_categoria")
+            .insert(categoriaIds.map((categoria_produto_id) => ({ servico_fornecedor_id: id, categoria_produto_id })));
+          if (insError) throw insError;
+        }
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_fornecedor"] }),
+  });
+}
+
+/** Lança erro amigável quando o serviço já foi usado em algum produto/engajamento/beneficiamento. */
+export function useDeleteServicoFornecedor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("servico_fornecedor").delete().eq("id", id);
+      if (error) {
+        if (error.code === "23503") {
+          throw new Error("Este serviço já foi usado em algum produto, engajamento ou beneficiamento — não pode ser excluído.");
+        }
+        throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_fornecedor"] }),
   });
@@ -626,6 +688,80 @@ export function useCreateCompraInsumo() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["compras_insumo"] });
       qc.invalidateQueries({ queryKey: ["estoque"] });
+    },
+  });
+}
+
+/** Recalcula a mesma conversão usada pelo trigger de entrada de estoque, para manter o movimento em sincronia ao editar. */
+function calcularQuantidadeConvertida(unidadeCompra: string, quantidadeComprada: number, packQuantidade: number, fatorMetrosPorUnidade: number) {
+  return unidadeCompra === "peca" ? quantidadeComprada * packQuantidade : quantidadeComprada * fatorMetrosPorUnidade;
+}
+
+/** Edita uma compra já registrada e corrige o movimento de estoque de entrada correspondente, para não deixar o saldo desalinhado. */
+export function useUpdateCompraInsumo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string } & Partial<NovaCompraInsumo>) => {
+      const { id, ...resto } = input;
+      const { data: atual, error: eBusca } = await supabase.from("compras_insumo").select("*").eq("id", id).single();
+      if (eBusca) throw eBusca;
+
+      const payload = {
+        ...(resto.fornecedorId !== undefined && { fornecedor_id: resto.fornecedorId }),
+        ...(resto.materialId !== undefined && { material_id: resto.materialId }),
+        ...(resto.packQuantidade !== undefined && { pack_quantidade: resto.packQuantidade }),
+        ...(resto.quantidadeComprada !== undefined && { quantidade_comprada: resto.quantidadeComprada }),
+        ...(resto.precoPago !== undefined && { preco_pago: resto.precoPago }),
+        ...(resto.regimeTributario !== undefined && { regime_tributario: resto.regimeTributario as any }),
+        ...(resto.aliquotaCreditoPct !== undefined && { aliquota_credito_pct: resto.aliquotaCreditoPct }),
+        ...(resto.dataCompra !== undefined && { data_compra: resto.dataCompra }),
+        ...(resto.unidadeCompra !== undefined && { unidade_compra: resto.unidadeCompra as any }),
+        ...(resto.fatorMetrosPorUnidade !== undefined && { fator_metros_por_unidade: resto.fatorMetrosPorUnidade }),
+      };
+      const { error } = await supabase.from("compras_insumo").update(payload).eq("id", id);
+      if (error) throw error;
+
+      const unidadeCompra = resto.unidadeCompra ?? atual.unidade_compra;
+      const quantidadeComprada = resto.quantidadeComprada ?? atual.quantidade_comprada;
+      const packQuantidade = resto.packQuantidade ?? atual.pack_quantidade;
+      const fatorMetrosPorUnidade = resto.fatorMetrosPorUnidade ?? atual.fator_metros_por_unidade;
+      const materialId = resto.materialId ?? atual.material_id;
+      const novaQuantidadeConvertida = calcularQuantidadeConvertida(unidadeCompra, quantidadeComprada, packQuantidade, fatorMetrosPorUnidade);
+
+      const { error: eMov } = await supabase
+        .from("movimentos_estoque")
+        .update({ quantidade: novaQuantidadeConvertida, material_id: materialId })
+        .eq("referencia_tipo", "compra_insumo")
+        .eq("referencia_id", id);
+      if (eMov) throw eMov;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["compras_insumo"] });
+      qc.invalidateQueries({ queryKey: ["estoque"] });
+      qc.invalidateQueries({ queryKey: ["movimentos_estoque"] });
+    },
+  });
+}
+
+/** Lança erro amigável quando a compra já foi usada em algum produto ou beneficiamento. */
+export function useDeleteCompraInsumo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("compras_insumo").delete().eq("id", id);
+      if (error) {
+        if (error.code === "23503") {
+          throw new Error("Esta compra já foi usada em algum produto ou beneficiamento — não pode ser excluída.");
+        }
+        throw error;
+      }
+      const { error: eMov } = await supabase.from("movimentos_estoque").delete().eq("referencia_tipo", "compra_insumo").eq("referencia_id", id);
+      if (eMov) throw eMov;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["compras_insumo"] });
+      qc.invalidateQueries({ queryKey: ["estoque"] });
+      qc.invalidateQueries({ queryKey: ["movimentos_estoque"] });
     },
   });
 }

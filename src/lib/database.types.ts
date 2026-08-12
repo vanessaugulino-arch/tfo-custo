@@ -179,6 +179,7 @@ export type Database = {
       materiais: {
         Row: {
           codigo: string | null
+          cor: string | null
           criado_em: string
           id: string
           nome: string
@@ -186,6 +187,7 @@ export type Database = {
         }
         Insert: {
           codigo?: string | null
+          cor?: string | null
           criado_em?: string
           id?: string
           nome: string
@@ -193,6 +195,7 @@ export type Database = {
         }
         Update: {
           codigo?: string | null
+          cor?: string | null
           criado_em?: string
           id?: string
           nome?: string

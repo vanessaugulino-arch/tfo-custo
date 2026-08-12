@@ -13,6 +13,14 @@ export function formatDate(value: string | null | undefined): string {
   return new Date(value).toLocaleDateString("pt-BR");
 }
 
+/** Nome do material com a cor ao lado, quando cadastrada — para distinguir variantes do mesmo material (ex: "Algodão cru — verde"). */
+export function labelMaterial(material: { nome: string; cor?: string | null; codigo?: string | null }): string {
+  let label = material.nome;
+  if (material.cor) label += ` — ${material.cor}`;
+  if (material.codigo) label += ` (${material.codigo})`;
+  return label;
+}
+
 export const REGIME_LABELS: Record<string, string> = {
   simples_nacional: "Simples Nacional (sem crédito)",
   lucro_presumido_real: "Lucro Presumido/Real (crédito hoje)",

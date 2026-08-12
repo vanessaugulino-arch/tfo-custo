@@ -229,7 +229,7 @@ export function OnboardingWizard() {
     if (!user) return;
     await salvar.mutateAsync({ userId: user.id, ...campos });
     if (proximaEtapa) setEtapa(proximaEtapa);
-    else navigate("/insumos");
+    else navigate("/");
   }
 
   if (etapa === "marca") {
@@ -467,7 +467,7 @@ export function OnboardingWizard() {
       tituloDestaque="Pronto para começar."
       descricaoDireita="Seu perfil fica em Configurações — pode ajustar quando quiser."
       podeContinuar
-      textoBotao="Ir para Insumos →"
+      textoBotao="Ir para o Início →"
       aoContinuar={() => salvarEAvancar({ onboarding_concluido: true }, null)}
       carregando={salvar.isPending}
     >

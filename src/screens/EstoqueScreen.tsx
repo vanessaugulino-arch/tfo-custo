@@ -1,11 +1,31 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
 import { ImportModal, type ResultadoImport } from "@/components/ImportModal";
+import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
 import { Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import { useAjusteEstoque, useEstoqueAtual, useMovimentosEstoque } from "@/hooks/useData";
 import { findOrCreateMaterial, parseNumeroPtBr } from "@/lib/importHelpers";
 import { MODELO_ESTOQUE } from "@/lib/importFields";
-import { formatDate, formatNumber, MOVIMENTO_LABELS } from "@/lib/format";
+import { formatDate, formatNumber, labelMaterial, MOVIMENTO_LABELS } from "@/lib/format";
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    targetId: "estoque-saldo",
+    title: "O saldo é sempre automático",
+    texto:
+      "Entradas de compra, saídas por aprovação de produto e beneficiamento acontecem sozinhas. Aqui você só acompanha o resultado — clique em 'Ver movimentos' para ver o histórico de um material.",
+  },
+  {
+    targetId: "estoque-ajuste",
+    title: "Use o ajuste só para corrigir",
+    texto: "Inventário físico deu diferente do sistema? Perda, sobra ou erro de digitação em outra tela? Lance aqui um ajuste manual — positivo para entrada, negativo para saída.",
+  },
+  {
+    targetId: "estoque-movimentos",
+    title: "Histórico completo",
+    texto: "Todo movimento fica registrado com data, tipo e observação — nada é sobrescrito, então dá para auditar depois.",
+  },
+];
 
 export function EstoqueScreen() {
   const { data: estoque = [] } = useEstoqueAtual();
@@ -13,6 +33,7 @@ export function EstoqueScreen() {
   const { data: movimentos = [] } = useMovimentosEstoque(materialSelecionado);
   const ajustar = useAjusteEstoque();
   const [importAberto, setImportAberto] = useState(false);
+  const tour = useTourAutoShow("estoque");
 
   const [materialId, setMaterialId] = useState("");
   const [quantidade, setQuantidade] = useState("");
@@ -41,7 +62,7 @@ export function EstoqueScreen() {
         const qtd = parseNumeroPtBr(row.quantidade);
         if (!row.material?.trim()) throw new Error("material vazio");
         if (isNaN(qtd) || qtd === 0) throw new Error("quantidade inválida");
-        const materialId = await findOrCreateMaterial(row.material);
+        const materialId = await findOrCreateMaterial(row.material, row.cor);
         await ajustar.mutateAsync({
           materialId,
           quantidade: qtd,
@@ -60,6 +81,7 @@ export function EstoqueScreen() {
     const linhas = estoque.map((e) => ({
       Código: e.material.codigo ?? "",
       Material: e.material.nome,
+      Cor: e.material.cor ?? "",
       Unidade: e.material.unidade_padrao,
       "Saldo atual": e.saldo_atual,
     }));
@@ -78,6 +100,9 @@ export function EstoqueScreen() {
           subtitle="Entradas de compra e saídas por aprovação de produto são automáticas. Use o ajuste para corrigir após produção ou inventário."
         />
         <div className="flex gap-2">
+          <Button variant="ghost" onClick={tour.abrir}>
+            Tour desta tela
+          </Button>
           <Button variant="secondary" onClick={handleExportar}>
             Exportar (.xlsx)
           </Button>
@@ -87,11 +112,13 @@ export function EstoqueScreen() {
         </div>
       </div>
 
+      <Tour steps={TOUR_STEPS} aberto={tour.aberto} onFechar={tour.fechar} />
+
       {importAberto && (
         <ImportModal modelo={MODELO_ESTOQUE} onClose={() => setImportAberto(false)} onConfirmar={handleImportar} />
       )}
 
-      <Card className="mb-8">
+      <Card className="mb-8" data-tour="estoque-saldo">
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Saldo atual</h2>
         <table className="w-full text-sm">
           <thead>
@@ -106,7 +133,7 @@ export function EstoqueScreen() {
           <tbody>
             {estoque.map((e) => (
               <tr key={e.material_id} className="border-b border-border/60">
-                <td className="py-2 pr-4">{e.material.nome}</td>
+                <td className="py-2 pr-4">{labelMaterial(e.material)}</td>
                 <td className="py-2 pr-4">{e.material.codigo}</td>
                 <td className="py-2 pr-4">{e.material.unidade_padrao}</td>
                 <td className={`py-2 pr-4 font-medium ${e.saldo_atual < 0 ? "text-destructive" : ""}`}>
@@ -130,7 +157,7 @@ export function EstoqueScreen() {
         </table>
       </Card>
 
-      <Card className="mb-8">
+      <Card className="mb-8" data-tour="estoque-ajuste">
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Ajustar quantidade</h2>
         <form onSubmit={handleAjuste} className="grid grid-cols-4 gap-3 items-end">
           <Field label="Material">
@@ -138,7 +165,7 @@ export function EstoqueScreen() {
               <option value="">Selecionar...</option>
               {estoque.map((e) => (
                 <option key={e.material_id} value={e.material_id}>
-                  {e.material.nome}
+                  {labelMaterial(e.material)}
                 </option>
               ))}
             </Select>
@@ -161,7 +188,7 @@ export function EstoqueScreen() {
         </form>
       </Card>
 
-      <Card>
+      <Card data-tour="estoque-movimentos">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground">
             Movimentos {materialSelecionado ? "do material selecionado" : "(todos)"}
@@ -186,7 +213,7 @@ export function EstoqueScreen() {
             {movimentos.map((m: any) => (
               <tr key={m.id} className="border-b border-border/60">
                 <td className="py-2 pr-4">{formatDate(m.criado_em)}</td>
-                <td className="py-2 pr-4">{m.material?.nome}</td>
+                <td className="py-2 pr-4">{m.material ? labelMaterial(m.material) : ""}</td>
                 <td className="py-2 pr-4">{MOVIMENTO_LABELS[m.tipo]}</td>
                 <td className={`py-2 pr-4 ${m.quantidade < 0 ? "text-destructive" : "text-success"}`}>
                   {m.quantidade > 0 ? "+" : ""}

@@ -27,7 +27,7 @@ import {
   type NovaLinhaServicoProduto,
 } from "@/hooks/useData";
 import { custoInsumoPorPeca, custoMensalCargo, custoProducaoInternaPorPeca, custoServicoPorPeca, custoTotalProduto } from "@/engine/custo";
-import { formatBRL, formatNumber, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
+import { formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -66,6 +66,7 @@ interface InsumoLinhaUI extends NovaLinhaInsumoProduto {
   key: string;
   label: string;
   materialId: string;
+  fornecedorId: string;
 }
 
 export function NovoProdutoScreen() {
@@ -299,8 +300,9 @@ export function NovoProdutoScreen() {
     });
     const linha: InsumoLinhaUI = {
       key: crypto.randomUUID(),
-      label: `${material?.nome} — ${fornecedor?.nome}`,
+      label: `${material ? labelMaterial(material) : ""} — ${fornecedor?.nome}`,
       materialId: draftMaterialId,
+      fornecedorId: draftFornecedorId,
       compraInsumoId: compraVigente.id!,
       consumoQuantidade: consumo,
       desperdicioPct: desperdicio,
@@ -312,6 +314,22 @@ export function NovoProdutoScreen() {
     setDraftMaterialId(null);
     setDraftConsumo("");
     setDraftDesperdicio("0");
+  }
+
+  /** Remove a linha e devolve os valores para o formulário de cima, para corrigir e adicionar de novo. */
+  function iniciarEdicaoServico(l: ServicoLinhaUI) {
+    setServicosLinhas((prev) => prev.filter((x) => x.key !== l.key));
+    setDraftServicoFornecedorId(l.servicoFornecedorId);
+    setDraftTempoMinutos(l.tempoMinutos != null ? String(l.tempoMinutos) : "");
+    setDraftPrecoUnitario(l.precoUnitario != null ? String(l.precoUnitario) : "");
+  }
+
+  function iniciarEdicaoInsumo(l: InsumoLinhaUI) {
+    setInsumosLinhas((prev) => prev.filter((x) => x.key !== l.key));
+    setDraftFornecedorId(l.fornecedorId);
+    setDraftMaterialId(l.materialId);
+    setDraftConsumo(String(l.consumoQuantidade));
+    setDraftDesperdicio(String(l.desperdicioPct));
   }
 
   async function handleSalvarProduto() {
@@ -573,13 +591,18 @@ export function NovoProdutoScreen() {
                   {l.provisorio && <Badge tone="muted">provisório</Badge>}
                 </td>
                 <td className="py-2 pr-4">
-                  <button
-                    type="button"
-                    className="text-destructive"
-                    onClick={() => setServicosLinhas((prev) => prev.filter((x) => x.key !== l.key))}
-                  >
-                    Remover
-                  </button>
+                  <div className="flex gap-3">
+                    <button type="button" className="underline" onClick={() => iniciarEdicaoServico(l)}>
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="text-destructive"
+                      onClick={() => setServicosLinhas((prev) => prev.filter((x) => x.key !== l.key))}
+                    >
+                      Remover
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -600,7 +623,7 @@ export function NovoProdutoScreen() {
         <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 items-end mb-4">
           <Field label="Material">
             <Combobox
-              options={materiais.map((m) => ({ id: m.id, label: m.nome }))}
+              options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
               value={draftMaterialId}
               onChange={setDraftMaterialId}
               placeholder="Selecionar material..."
@@ -683,6 +706,9 @@ export function NovoProdutoScreen() {
                     )}
                   </td>
                   <td className="py-2 pr-4">
+                    <button type="button" className="underline mr-3" onClick={() => iniciarEdicaoInsumo(l)}>
+                      Editar
+                    </button>
                     <button
                       type="button"
                       className="text-destructive"
