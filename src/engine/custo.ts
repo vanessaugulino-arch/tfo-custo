@@ -1,4 +1,4 @@
-export type ModeloPrecificacaoServico = "colecao" | "peca_desenvolvida" | "peca_produzida" | "tempo";
+export type ModeloPrecificacaoServico = "colecao" | "peca_desenvolvida" | "peca_produzida" | "tempo" | "metro_corrido";
 
 export interface ServicoLinha {
   modeloPrecificacao: ModeloPrecificacaoServico;

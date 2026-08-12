@@ -4,7 +4,7 @@ import { ComboboxMulti } from "@/components/ComboboxMulti";
 import { ImportModal, type ResultadoImport } from "@/components/ImportModal";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
-import { Badge, Button, Card, Checkbox, Field, Input, PageTitle, Select } from "@/components/ui";
+import { Badge, Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import {
   useAplicarBeneficiamento,
   useCategorias,
@@ -41,18 +41,12 @@ const TOUR_STEPS: TourStep[] = [
     targetId: "servicos-modelo",
     title: "Escolha o modelo de precificação com cuidado",
     texto:
-      "É a decisão mais importante desta tela: 'por coleção' e 'por peça desenvolvida' dividem um valor combinado entre várias peças; 'por peça produzida' cobra o valor cheio em cada peça; 'por tempo' multiplica minutos pelo custo por minuto.",
+      "É a decisão mais importante desta tela: 'por coleção' e 'por peça desenvolvida' dividem um valor combinado entre várias peças; 'por peça produzida' cobra o valor cheio em cada peça; 'por tempo' multiplica minutos pelo custo por minuto; 'metro corrido' é para quando o fornecedor transforma uma matéria-prima sua em outra (beneficiamento) — os detalhes dessa transformação aparecem logo abaixo.",
   },
   {
     targetId: "servicos-colecao",
     title: "Serviços 'por coleção' ficam presos a uma coleção",
     texto: "Ao escolher esse modelo, você define de uma vez qual coleção ele atende — não dá para reaproveitar em outra coleção depois.",
-  },
-  {
-    targetId: "servicos-beneficiamento",
-    title: "Beneficiamento é detalhado na hora do cadastro",
-    texto:
-      "Marque aqui quando o fornecedor transforma um insumo seu em outro (ex: estamparia) — os campos de origem, material resultante e custo aparecem logo abaixo, e são salvos junto com o serviço.",
   },
   {
     targetId: "servicos-tabela",
@@ -65,20 +59,20 @@ interface FormServico {
   fornecedorId: string | null;
   servicoId: string | null;
   categoriaIds: string[];
+  todasCategorias: boolean;
   modelo: ModeloPrecificacaoServico;
   colecaoId: string | null;
   custoPorMinuto: string;
-  beneficiamento: boolean;
 }
 
 const FORM_VAZIO: FormServico = {
   fornecedorId: null,
   servicoId: null,
   categoriaIds: [],
+  todasCategorias: false,
   modelo: "peca_desenvolvida",
   colecaoId: null,
   custoPorMinuto: "",
-  beneficiamento: false,
 };
 
 interface FormBeneficiamento {
@@ -130,6 +124,10 @@ export function ServicosScreen() {
   const [form, setForm] = useState<FormServico>(FORM_VAZIO);
   const [benef, setBenef] = useState<FormBeneficiamento>(beneficiamentoVazio());
   const [erro, setErro] = useState<string | null>(null);
+  const [confirmandoMetroCorrido, setConfirmandoMetroCorrido] = useState(false);
+  const [modeloAntesDoMetroCorrido, setModeloAntesDoMetroCorrido] = useState<ModeloPrecificacaoServico>("peca_desenvolvida");
+
+  const isBeneficiamento = form.modelo === "metro_corrido";
 
   const { data: materiaisOrigemDisponiveis = [] } = useMateriaisPorFornecedor(benef.fornecedorOrigemId);
   const { data: compraOrigem } = useUltimaCompraPorFornecedorMaterial(benef.fornecedorOrigemId, benef.materialOrigemId);
@@ -140,6 +138,23 @@ export function ServicosScreen() {
   const custoUnitarioResultante =
     quantidadeBenefNum > 0 ? (custoOrigemUnitario * quantidadeBenefNum + custoBenefNum) / quantidadeBenefNum : 0;
 
+  function handleModeloChange(novoModelo: ModeloPrecificacaoServico) {
+    if (novoModelo === "metro_corrido") {
+      setModeloAntesDoMetroCorrido(form.modelo);
+      setForm((f) => ({ ...f, modelo: novoModelo }));
+      setConfirmandoMetroCorrido(true);
+    } else {
+      setForm((f) => ({ ...f, modelo: novoModelo }));
+    }
+  }
+
+  function confirmarBeneficiamento(ehBeneficiamento: boolean) {
+    setConfirmandoMetroCorrido(false);
+    if (!ehBeneficiamento) {
+      setForm((f) => ({ ...f, modelo: modeloAntesDoMetroCorrido }));
+    }
+  }
+
   async function handleImportar(linhas: Record<string, string>[]): Promise<ResultadoImport> {
     let sucesso = 0;
     const erros: ResultadoImport["erros"] = [];
@@ -149,12 +164,12 @@ export function ServicosScreen() {
         if (!row.fornecedor?.trim() || !row.servico?.trim()) throw new Error("fornecedor ou serviço vazio");
         const modeloRow = row.modelo_precificacao?.trim().toLowerCase();
         if (!MODELOS_VALIDOS.has(modeloRow))
-          throw new Error("modelo de precificação inválido (use colecao, peca_desenvolvida, peca_produzida ou tempo)");
+          throw new Error(
+            "modelo de precificação inválido (use colecao, peca_desenvolvida, peca_produzida ou tempo — 'metro_corrido' não pode ser importado em lote)",
+          );
         const custoPorMinuto = modeloRow === "tempo" ? parseNumeroPtBr(row.custo_por_minuto) : null;
         if (modeloRow === "tempo" && !(Number(custoPorMinuto) > 0)) throw new Error("custo por minuto obrigatório para o modelo 'tempo'");
         if (modeloRow === "colecao") throw new Error("modelo 'colecao' não pode ser importado em lote — cadastre manualmente para escolher a coleção");
-        if (["sim", "s", "yes", "true"].includes((row.beneficiamento ?? "").trim().toLowerCase()))
-          throw new Error("beneficiamento não pode ser importado em lote — os detalhes da transformação precisam ser escolhidos manualmente");
 
         const fornecedorId = await findOrCreateFornecedor(row.fornecedor);
         const servicoId = await findOrCreateServico(row.servico);
@@ -169,6 +184,7 @@ export function ServicosScreen() {
           custoPorMinuto,
           colecaoId: null,
           beneficiamento: false,
+          todasCategorias: false,
           categoriaIds: categoriaIdsRow,
         });
         sucesso++;
@@ -196,10 +212,10 @@ export function ServicosScreen() {
       fornecedorId: sf.fornecedor_id,
       servicoId: sf.servico_id,
       categoriaIds: sf.categorias.map((c) => c.id),
+      todasCategorias: sf.todas_categorias,
       modelo: sf.modelo_precificacao as ModeloPrecificacaoServico,
       colecaoId: sf.colecao_id,
       custoPorMinuto: sf.custo_por_minuto != null ? String(sf.custo_por_minuto) : "",
-      beneficiamento: sf.beneficiamento,
     });
     const b = beneficiamentoDoServico(sf.id);
     if (b) {
@@ -254,9 +270,13 @@ export function ServicosScreen() {
       setErro("Selecione a coleção para este serviço 'por coleção'.");
       return;
     }
-    if (form.beneficiamento) {
+    if (isBeneficiamento) {
       if (!benef.fornecedorOrigemId || !benef.materialOrigemId || !benef.materialResultanteId) {
         setErro("Preencha o fornecedor de origem, o material de origem e o material resultante do beneficiamento.");
+        return;
+      }
+      if (!benef.corResultante.trim()) {
+        setErro("Informe a cor/característica do material resultante.");
         return;
       }
       if (quantidadeBenefNum <= 0) {
@@ -279,11 +299,12 @@ export function ServicosScreen() {
       modeloPrecificacao: form.modelo,
       custoPorMinuto: form.modelo === "tempo" ? Number(form.custoPorMinuto) : null,
       colecaoId: form.modelo === "colecao" ? form.colecaoId : null,
-      beneficiamento: form.beneficiamento,
-      categoriaIds: form.categoriaIds,
+      beneficiamento: isBeneficiamento,
+      todasCategorias: form.todasCategorias,
+      categoriaIds: form.todasCategorias ? categorias.map((c) => c.id) : form.categoriaIds,
     };
 
-    if (form.beneficiamento && benef.corResultante.trim()) {
+    if (isBeneficiamento) {
       const materialResultanteAtual = materiais.find((m) => m.id === benef.materialResultanteId);
       if (benef.corResultante.trim() !== (materialResultanteAtual?.cor ?? "")) {
         await updateMaterial.mutateAsync({ id: benef.materialResultanteId!, cor: benef.corResultante.trim() });
@@ -292,7 +313,7 @@ export function ServicosScreen() {
 
     if (editandoId) {
       await updateServicoFornecedor.mutateAsync({ id: editandoId, ...payload });
-      if (form.beneficiamento && compraOrigem) {
+      if (isBeneficiamento && compraOrigem) {
         if (editandoBeneficiamentoId) {
           await updateBeneficiamento.mutateAsync({
             id: editandoBeneficiamentoId,
@@ -324,7 +345,7 @@ export function ServicosScreen() {
     }
 
     const criado = await createServicoFornecedor.mutateAsync(payload);
-    if (form.beneficiamento && compraOrigem) {
+    if (isBeneficiamento && compraOrigem) {
       await aplicarBeneficiamento.mutateAsync({
         servicoFornecedorId: criado.id,
         fornecedorId: form.fornecedorId,
@@ -365,6 +386,32 @@ export function ServicosScreen() {
         <ImportModal modelo={MODELO_SERVICOS} onClose={() => setImportAberto(false)} onConfirmar={handleImportar} />
       )}
 
+      {confirmandoMetroCorrido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm px-4">
+          <Card className="max-w-lg">
+            <h2 className="mb-2 text-base font-semibold">Esse serviço é um beneficiamento de uma matéria-prima?</h2>
+            <p className="mb-3 text-sm text-muted-foreground">
+              <strong>Beneficiamento</strong> é quando o fornecedor transforma uma matéria-prima sua inteira, antes de
+              ela ser cortada — ex: tingir ou estampar um tecido inteiro (rolo). Ele "sai" do estoque como um material
+              e "entra" de volta como outro.
+            </p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Isso é diferente de um <strong>acabamento</strong>, que acontece numa peça já cortada ou pronta — ex:
+              tingir ou estampar depois de cortada. Acabamento não é um "metro corrido" — use outro modelo de
+              precificação para ele (por peça produzida ou desenvolvida, por exemplo).
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => confirmarBeneficiamento(true)}>
+                Sim, é um beneficiamento
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => confirmarBeneficiamento(false)}>
+                Não, é outra coisa
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <Card className="mb-8">
         {editandoId && (
           <div className="mb-4 flex items-center justify-between rounded-md bg-accent px-4 py-2 text-sm text-accent-foreground">
@@ -399,17 +446,38 @@ export function ServicosScreen() {
             hint={
               <InfoTooltip>
                 Categorias como "Camisa" ou "Calça" — as mesmas usadas na tela de produto. Digite para selecionar uma já
-                existente ou criar uma nova, sem sair desta tela.
+                existente ou criar uma nova, sem sair desta tela. Use "Todas as categorias" se este serviço atende
+                qualquer categoria — inclusive as que você ainda vai criar.
               </InfoTooltip>
             }
           >
-            <ComboboxMulti
-              options={categorias.map((c) => ({ id: c.id, label: c.nome }))}
-              values={form.categoriaIds}
-              onChange={(v) => setForm((f) => ({ ...f, categoriaIds: v }))}
-              onCreate={async (nome) => (await createCategoria.mutateAsync(nome)).id}
-              placeholder="Selecionar ou criar categorias..."
-            />
+            <div className="mb-2">
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, todasCategorias: !f.todasCategorias, categoriaIds: [] }))}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  form.todasCategorias
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card hover:bg-muted"
+                }`}
+              >
+                {form.todasCategorias ? "✓ Todas as categorias" : "Todas as categorias"}
+              </button>
+            </div>
+            {form.todasCategorias ? (
+              <p className="text-xs text-muted-foreground">
+                Atende todas as categorias já cadastradas — e vai atender automaticamente qualquer categoria nova que
+                você criar depois.
+              </p>
+            ) : (
+              <ComboboxMulti
+                options={categorias.map((c) => ({ id: c.id, label: c.nome }))}
+                values={form.categoriaIds}
+                onChange={(v) => setForm((f) => ({ ...f, categoriaIds: v }))}
+                onCreate={async (nome) => (await createCategoria.mutateAsync(nome)).id}
+                placeholder="Selecionar ou criar categorias..."
+              />
+            )}
           </Field>
           <Field
             label="Modelo de precificação"
@@ -423,10 +491,12 @@ export function ServicosScreen() {
                 <strong>Por peça produzida:</strong> {MODELO_PRECIFICACAO_EXPLICACAO.peca_produzida}
                 <br />
                 <strong>Por tempo:</strong> {MODELO_PRECIFICACAO_EXPLICACAO.tempo}
+                <br />
+                <strong>Metro corrido:</strong> {MODELO_PRECIFICACAO_EXPLICACAO.metro_corrido}
               </InfoTooltip>
             }
           >
-            <Select value={form.modelo} onChange={(e) => setForm((f) => ({ ...f, modelo: e.target.value as ModeloPrecificacaoServico }))}>
+            <Select value={form.modelo} onChange={(e) => handleModeloChange(e.target.value as ModeloPrecificacaoServico)}>
               {MODELOS.map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -475,22 +545,7 @@ export function ServicosScreen() {
             </div>
           )}
 
-          <div className="col-span-2" data-tour="servicos-beneficiamento">
-            <Checkbox
-              label="Este serviço é um beneficiamento (transforma um insumo em outro)"
-              checked={form.beneficiamento}
-              onChange={(v) => setForm((f) => ({ ...f, beneficiamento: v }))}
-              hint={
-                <InfoTooltip>
-                  Marque quando o fornecedor recebe uma matéria-prima sua e devolve outra — ex: estamparia (tecido cru
-                  vira tecido estampado), tingimento, lavanderia. Os campos abaixo aparecem para você detalhar essa
-                  transformação, e são salvos junto com o serviço.
-                </InfoTooltip>
-              }
-            />
-          </div>
-
-          {form.beneficiamento && (
+          {isBeneficiamento && (
             <div className="col-span-2 grid grid-cols-2 gap-4 rounded-md border border-border p-4">
               <Field
                 label="Fornecedor de origem (quem vendeu o material)"
@@ -537,8 +592,14 @@ export function ServicosScreen() {
                 />
               </Field>
               <Field
-                label="Cor do material resultante (opcional)"
-                hint={<InfoTooltip>Só é usada se você estiver criando um material novo agora, ao lado.</InfoTooltip>}
+                label="Cor/Característica do material resultante"
+                hint={
+                  <InfoTooltip>
+                    Obrigatório. Pode ser uma cor (ex: "verde") ou outra característica que diferencie o resultado (ex:
+                    "estampa dinossauro", "tingido azul-marinho") — é isso que separa este material de outras variantes
+                    no estoque.
+                  </InfoTooltip>
+                }
               >
                 <Input
                   value={benef.corResultante}
@@ -649,9 +710,11 @@ export function ServicosScreen() {
                     </td>
                     <td className="py-2 pr-4">
                       <div className="flex flex-wrap gap-1">
-                        {sf.categorias.map((c) => (
-                          <Badge key={c.id}>{c.nome}</Badge>
-                        ))}
+                        {sf.todas_categorias ? (
+                          <Badge>Todas</Badge>
+                        ) : (
+                          sf.categorias.map((c) => <Badge key={c.id}>{c.nome}</Badge>)
+                        )}
                       </div>
                     </td>
                     <td className="py-2 pr-4">{MODELO_PRECIFICACAO_LABELS[sf.modelo_precificacao]}</td>

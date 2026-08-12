@@ -32,13 +32,13 @@ import { formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_LABELS } fr
 const TOUR_STEPS: TourStep[] = [
   {
     targetId: "produto-colecao",
-    title: "A coleção define como o custo pooled é dividido",
+    title: "A coleção define como o custo compartilhado é dividido",
     texto:
       "Se você usar serviços 'por coleção' ou 'por peça desenvolvida', a coleção deste produto é o que define o grupo de peças que vai dividir o custo — escolha com atenção.",
   },
   {
     targetId: "produto-servicos",
-    title: "Serviços pooled aparecem como 'provisório'",
+    title: "Serviços compartilhados aparecem como 'provisório'",
     texto:
       "Ao adicionar um serviço 'por coleção' ou 'por peça desenvolvida', o custo mostrado é uma estimativa que muda conforme mais peças usam o mesmo serviço. Ele só fica definitivo quando você 'fecha' a coleção.",
   },
@@ -456,10 +456,12 @@ export function NovoProdutoScreen() {
         <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-3 items-end mb-4">
           <Field label="Serviço (fornecedor)">
             <Combobox
-              options={servicosFornecedor.map((sf) => ({
-                id: sf.id,
-                label: `${sf.fornecedor.nome} — ${sf.servico.nome} (${MODELO_PRECIFICACAO_LABELS[sf.modelo_precificacao]})`,
-              }))}
+              options={servicosFornecedor
+                .filter((sf) => sf.modelo_precificacao !== "metro_corrido")
+                .map((sf) => ({
+                  id: sf.id,
+                  label: `${sf.fornecedor.nome} — ${sf.servico.nome} (${MODELO_PRECIFICACAO_LABELS[sf.modelo_precificacao]})`,
+                }))}
               value={draftServicoFornecedorId}
               onChange={(id) => {
                 setDraftServicoFornecedorId(id);
@@ -493,8 +495,8 @@ export function NovoProdutoScreen() {
               label="Valor total combinado (R$)"
               hint={
                 <InfoTooltip>
-                  Ainda não existe um engajamento deste serviço para esta coleção — informe o valor total combinado com
-                  o fornecedor. Ele será dividido pelas peças da coleção quando ela for "fechada".
+                  Ainda não existe um valor combinado deste serviço para esta coleção — informe o valor total combinado
+                  com o fornecedor. Ele será dividido pelas peças da coleção quando ela for "fechada".
                 </InfoTooltip>
               }
             >

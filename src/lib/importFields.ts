@@ -20,7 +20,7 @@ export const MODELO_INSUMOS: ModeloImport = {
   campos: [
     { id: "fornecedor", label: "Fornecedor", tipo: "texto", obrigatorio: true, keywords: ["fornecedor", "supplier"], explicacao: "Nome do fornecedor. Se não existir ainda, é criado automaticamente." },
     { id: "material", label: "Material / insumo", tipo: "texto", obrigatorio: true, keywords: ["material", "insumo", "mp", "matéria", "materia"], explicacao: "Nome do material ou matéria-prima. Se não existir, é criado automaticamente." },
-    { id: "cor", label: "Cor", tipo: "texto", obrigatorio: false, keywords: ["cor", "color", "cores"], explicacao: "Opcional — use quando tiver o mesmo material em cores diferentes (ex: 'Algodão cru' verde e cinza são tratados como materiais separados)." },
+    { id: "cor", label: "Cor/Característica", tipo: "texto", obrigatorio: false, keywords: ["cor", "color", "cores", "característica", "caracteristica"], explicacao: "Opcional — use quando tiver o mesmo material em cores ou variantes diferentes (ex: 'Algodão cru' verde e cinza são tratados como materiais separados)." },
     { id: "pack", label: "Pack", tipo: "numerico", obrigatorio: true, keywords: ["pack", "embalagem", "rolo", "volume"], explicacao: "A cada quantos metros/unidades o fornecedor vende este material." },
     { id: "quantidade_comprada", label: "Quantidade comprada", tipo: "numerico", obrigatorio: true, keywords: ["quantidade", "qtd", "comprada"], explicacao: "Quantidade total comprada nesta nota/lote, na unidade de compra (metro, kg ou peça)." },
     { id: "preco_pago", label: "Preço pago (R$)", tipo: "monetario", obrigatorio: true, keywords: ["preco", "preço", "valor", "pago", "total"], explicacao: "Valor total pago pelo lote (não o valor unitário)." },
@@ -39,7 +39,7 @@ export const MODELO_SERVICOS: ModeloImport = {
     { id: "fornecedor", label: "Fornecedor", tipo: "texto", obrigatorio: true, keywords: ["fornecedor", "supplier"], explicacao: "Nome do fornecedor do serviço. Se não existir, é criado automaticamente." },
     { id: "servico", label: "Tipo de serviço", tipo: "texto", obrigatorio: true, keywords: ["servico", "serviço", "tipo"], explicacao: "Ex: Modelagem, Corte, Costura. Se não existir, é criado automaticamente." },
     { id: "categorias", label: "Categorias atendidas", tipo: "texto", obrigatorio: false, keywords: ["categoria", "categorias"], explicacao: "Uma ou mais categorias separadas por vírgula (ex: Camisa, Calça). Categorias novas são criadas automaticamente." },
-    { id: "modelo_precificacao", label: "Modelo de precificação", tipo: "texto", obrigatorio: true, keywords: ["modelo", "precificação", "precificacao"], explicacao: "peca_desenvolvida, peca_produzida ou tempo. O modelo 'colecao' precisa ser cadastrado manualmente (exige escolher a coleção)." },
+    { id: "modelo_precificacao", label: "Modelo de precificação", tipo: "texto", obrigatorio: true, keywords: ["modelo", "precificação", "precificacao"], explicacao: "peca_desenvolvida, peca_produzida ou tempo. Os modelos 'colecao' e 'metro_corrido' (beneficiamento) precisam ser cadastrados manualmente." },
     { id: "custo_por_minuto", label: "Custo por minuto (R$)", tipo: "monetario", obrigatorio: false, keywords: ["minuto", "custo por minuto"], explicacao: "Obrigatório apenas quando o modelo é 'tempo'." },
   ],
   linhaExemplo: ["AJW", "Corte", "Camisa, Calça", "peca_desenvolvida", ""],
@@ -50,7 +50,7 @@ export const MODELO_ESTOQUE: ModeloImport = {
   label: "Ajustes de estoque",
   campos: [
     { id: "material", label: "Material", tipo: "texto", obrigatorio: true, keywords: ["material", "insumo"], explicacao: "Nome do material. Se não existir, é criado automaticamente." },
-    { id: "cor", label: "Cor", tipo: "texto", obrigatorio: false, keywords: ["cor", "color", "cores"], explicacao: "Opcional — só preencha se esse material tiver variantes de cor cadastradas (ex: 'Algodão cru' verde e cinza são materiais separados)." },
+    { id: "cor", label: "Cor/Característica", tipo: "texto", obrigatorio: false, keywords: ["cor", "color", "cores", "característica", "caracteristica"], explicacao: "Opcional — só preencha se esse material tiver variantes de cor/característica cadastradas (ex: 'Algodão cru' verde e cinza são materiais separados)." },
     { id: "quantidade", label: "Quantidade (+ entra / − sai)", tipo: "numerico", obrigatorio: true, keywords: ["quantidade", "saldo", "ajuste"], explicacao: "Positivo para entrada, negativo para saída — ex: ajuste de inventário." },
     { id: "observacao", label: "Observação", tipo: "texto", obrigatorio: false, keywords: ["observação", "observacao", "motivo"], explicacao: "Motivo do ajuste, opcional." },
   ],

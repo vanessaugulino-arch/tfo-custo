@@ -667,6 +667,7 @@ export type Database = {
           id: string
           modelo_precificacao: string
           servico_id: string
+          todas_categorias: boolean
           user_id: string
         }
         Insert: {
@@ -678,6 +679,7 @@ export type Database = {
           id?: string
           modelo_precificacao: string
           servico_id: string
+          todas_categorias?: boolean
           user_id?: string
         }
         Update: {
@@ -689,6 +691,7 @@ export type Database = {
           id?: string
           modelo_precificacao?: string
           servico_id?: string
+          todas_categorias?: boolean
           user_id?: string
         }
         Relationships: [

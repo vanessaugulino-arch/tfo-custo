@@ -241,6 +241,10 @@ export function InsumosScreen() {
       setErro("Selecione ou crie um fornecedor e um material.");
       return;
     }
+    if (!cor.trim()) {
+      setErro("Informe a cor/característica do material.");
+      return;
+    }
     if (packNum <= 0 || qtdNum <= 0 || precoNum < 0) {
       setErro("Verifique o pack, a quantidade comprada e o preço pago.");
       return;
@@ -337,11 +341,12 @@ export function InsumosScreen() {
               />
             </Field>
             <Field
-              label="Cor"
+              label="Cor/Característica"
               hint={
                 <InfoTooltip>
-                  Opcional. Se você tem o mesmo material em cores diferentes (ex: algodão cru verde e cinza), cadastre
-                  cada cor separadamente — elas viram materiais distintos, com estoque e custo próprios.
+                  Obrigatório. Se você tem o mesmo material em cores ou variantes diferentes (ex: algodão cru verde e
+                  cinza), cadastre cada uma separadamente — elas viram materiais distintos, com estoque e custo
+                  próprios.
                 </InfoTooltip>
               }
             >

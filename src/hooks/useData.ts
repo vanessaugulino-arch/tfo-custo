@@ -272,7 +272,7 @@ export function useCreateServico() {
 // Serviço por fornecedor (modelo de precificação + categorias atendidas)
 // ---------------------------------------------------------------------------
 
-export type ModeloPrecificacaoServico = "colecao" | "peca_desenvolvida" | "peca_produzida" | "tempo";
+export type ModeloPrecificacaoServico = "colecao" | "peca_desenvolvida" | "peca_produzida" | "tempo" | "metro_corrido";
 
 export type ServicoFornecedorCompleto = Tables["servico_fornecedor"]["Row"] & {
   fornecedor: Tables["fornecedores"]["Row"];
@@ -307,6 +307,7 @@ interface NovoServicoFornecedor {
   custoPorMinuto: number | null;
   colecaoId: string | null;
   beneficiamento: boolean;
+  todasCategorias: boolean;
   categoriaIds: string[];
 }
 
@@ -323,6 +324,7 @@ export function useCreateServicoFornecedor() {
           custo_por_minuto: input.custoPorMinuto,
           colecao_id: input.colecaoId,
           beneficiamento: input.beneficiamento,
+          todas_categorias: input.todasCategorias,
         })
         .select()
         .single();
@@ -357,6 +359,7 @@ export function useUpdateServicoFornecedor() {
           ...(resto.custoPorMinuto !== undefined && { custo_por_minuto: resto.custoPorMinuto }),
           ...(resto.colecaoId !== undefined && { colecao_id: resto.colecaoId }),
           ...(resto.beneficiamento !== undefined && { beneficiamento: resto.beneficiamento }),
+          ...(resto.todasCategorias !== undefined && { todas_categorias: resto.todasCategorias }),
         })
         .eq("id", id);
       if (error) throw error;
