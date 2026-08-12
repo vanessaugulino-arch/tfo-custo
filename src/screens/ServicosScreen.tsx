@@ -7,7 +7,6 @@ import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
 import { Badge, Button, Card, Checkbox, Field, Input, PageTitle, Select } from "@/components/ui";
 import {
   useAplicarBeneficiamento,
-  useBeneficiamentosPorServico,
   useCategorias,
   useColecoes,
   useCreateCategoria,
@@ -18,9 +17,13 @@ import {
   useDeleteServicoFornecedor,
   useFornecedores,
   useMateriais,
+  useMateriaisPorFornecedor,
+  useServicoFornecedorUsoCount,
   useServicos,
   useServicosFornecedor,
+  useTodosBeneficiamentos,
   useUltimaCompraPorFornecedorMaterial,
+  useUpdateBeneficiamento,
   useUpdateMaterial,
   useUpdateServicoFornecedor,
   type ModeloPrecificacaoServico,
@@ -28,7 +31,7 @@ import {
 } from "@/hooks/useData";
 import { findOrCreateCategoria, findOrCreateFornecedor, findOrCreateServico, parseNumeroPtBr } from "@/lib/importHelpers";
 import { MODELO_SERVICOS } from "@/lib/importFields";
-import { formatBRL, formatDate, formatNumber, labelMaterial, MODELO_PRECIFICACAO_EXPLICACAO, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
+import { formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_EXPLICACAO, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
 
 const MODELOS = Object.entries(MODELO_PRECIFICACAO_LABELS) as [ModeloPrecificacaoServico, string][];
 const MODELOS_VALIDOS = new Set(["colecao", "peca_desenvolvida", "peca_produzida", "tempo"]);
@@ -47,14 +50,14 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     targetId: "servicos-beneficiamento",
-    title: "Beneficiamento é diferente de um serviço comum",
+    title: "Beneficiamento é detalhado na hora do cadastro",
     texto:
-      "Marque aqui quando o fornecedor transforma um insumo seu em outro (ex: estamparia). Ao salvar o serviço, a tela de registro do beneficiamento abre automaticamente — e você pode reabri-la depois clicando em 'Registrar beneficiamento' na lista, para lançar novos lotes.",
+      "Marque aqui quando o fornecedor transforma um insumo seu em outro (ex: estamparia) — os campos de origem, material resultante e custo aparecem logo abaixo, e são salvos junto com o serviço.",
   },
   {
     targetId: "servicos-tabela",
     title: "Serviços já cadastrados",
-    texto: "Aqui você edita, exclui ou acessa o registro de beneficiamento de cada serviço.",
+    texto: "Você pode editar ou excluir enquanto o serviço ainda não foi usado em nenhum produto — depois disso, para não desalinhar custos já calculados, só dá para excluir (se não tiver produto vinculado) ou cadastrar um novo.",
   },
 ];
 
@@ -78,22 +81,64 @@ const FORM_VAZIO: FormServico = {
   beneficiamento: false,
 };
 
+interface FormBeneficiamento {
+  fornecedorOrigemId: string | null;
+  materialOrigemId: string | null;
+  materialResultanteId: string | null;
+  corResultante: string;
+  quantidade: string;
+  custo: string;
+  data: string;
+}
+
+function beneficiamentoVazio(): FormBeneficiamento {
+  return {
+    fornecedorOrigemId: null,
+    materialOrigemId: null,
+    materialResultanteId: null,
+    corResultante: "",
+    quantidade: "",
+    custo: "",
+    data: new Date().toISOString().slice(0, 10),
+  };
+}
+
 export function ServicosScreen() {
   const { data: fornecedores = [] } = useFornecedores();
   const { data: servicos = [] } = useServicos();
   const { data: categorias = [] } = useCategorias();
   const { data: colecoes = [] } = useColecoes();
   const { data: servicosFornecedor = [] } = useServicosFornecedor();
+  const { data: beneficiamentos = [] } = useTodosBeneficiamentos();
+  const { data: usoMap = new Map<string, number>() } = useServicoFornecedorUsoCount();
+  const { data: materiais = [] } = useMateriais();
   const createFornecedor = useCreateFornecedor();
   const createServico = useCreateServico();
   const createCategoria = useCreateCategoria();
+  const createMaterial = useCreateMaterial();
+  const updateMaterial = useUpdateMaterial();
   const createServicoFornecedor = useCreateServicoFornecedor();
   const updateServicoFornecedor = useUpdateServicoFornecedor();
   const deleteServicoFornecedor = useDeleteServicoFornecedor();
+  const aplicarBeneficiamento = useAplicarBeneficiamento();
+  const updateBeneficiamento = useUpdateBeneficiamento();
   const [importAberto, setImportAberto] = useState(false);
-  const [beneficiarId, setBeneficiarId] = useState<string | null>(null);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editandoBeneficiamentoId, setEditandoBeneficiamentoId] = useState<string | null>(null);
   const tour = useTourAutoShow("servicos");
+
+  const [form, setForm] = useState<FormServico>(FORM_VAZIO);
+  const [benef, setBenef] = useState<FormBeneficiamento>(beneficiamentoVazio());
+  const [erro, setErro] = useState<string | null>(null);
+
+  const { data: materiaisOrigemDisponiveis = [] } = useMateriaisPorFornecedor(benef.fornecedorOrigemId);
+  const { data: compraOrigem } = useUltimaCompraPorFornecedorMaterial(benef.fornecedorOrigemId, benef.materialOrigemId);
+
+  const quantidadeBenefNum = Number(benef.quantidade) || 0;
+  const custoBenefNum = Number(benef.custo) || 0;
+  const custoOrigemUnitario = compraOrigem?.preco_unitario_liquido ?? 0;
+  const custoUnitarioResultante =
+    quantidadeBenefNum > 0 ? (custoOrigemUnitario * quantidadeBenefNum + custoBenefNum) / quantidadeBenefNum : 0;
 
   async function handleImportar(linhas: Record<string, string>[]): Promise<ResultadoImport> {
     let sucesso = 0;
@@ -108,13 +153,14 @@ export function ServicosScreen() {
         const custoPorMinuto = modeloRow === "tempo" ? parseNumeroPtBr(row.custo_por_minuto) : null;
         if (modeloRow === "tempo" && !(Number(custoPorMinuto) > 0)) throw new Error("custo por minuto obrigatório para o modelo 'tempo'");
         if (modeloRow === "colecao") throw new Error("modelo 'colecao' não pode ser importado em lote — cadastre manualmente para escolher a coleção");
+        if (["sim", "s", "yes", "true"].includes((row.beneficiamento ?? "").trim().toLowerCase()))
+          throw new Error("beneficiamento não pode ser importado em lote — os detalhes da transformação precisam ser escolhidos manualmente");
 
         const fornecedorId = await findOrCreateFornecedor(row.fornecedor);
         const servicoId = await findOrCreateServico(row.servico);
         const nomesCategorias = (row.categorias ?? "").split(",").map((s) => s.trim()).filter(Boolean);
         const categoriaIdsRow: string[] = [];
         for (const nome of nomesCategorias) categoriaIdsRow.push(await findOrCreateCategoria(nome));
-        const beneficiamentoRow = ["sim", "s", "yes", "true"].includes((row.beneficiamento ?? "").trim().toLowerCase());
 
         await createServicoFornecedor.mutateAsync({
           fornecedorId,
@@ -122,7 +168,7 @@ export function ServicosScreen() {
           modeloPrecificacao: modeloRow as ModeloPrecificacaoServico,
           custoPorMinuto,
           colecaoId: null,
-          beneficiamento: beneficiamentoRow,
+          beneficiamento: false,
           categoriaIds: categoriaIdsRow,
         });
         sucesso++;
@@ -133,10 +179,18 @@ export function ServicosScreen() {
     return { sucesso, erros };
   }
 
-  const [form, setForm] = useState<FormServico>(FORM_VAZIO);
-  const [erro, setErro] = useState<string | null>(null);
+  function beneficiamentoDoServico(servicoFornecedorId: string) {
+    return beneficiamentos.find((b) => b.servico_fornecedor_id === servicoFornecedorId) ?? null;
+  }
 
   function iniciarEdicao(sf: ServicoFornecedorCompleto) {
+    const usados = usoMap.get(sf.id) ?? 0;
+    if (usados > 0) {
+      window.alert(
+        `Este serviço já foi usado em ${usados} produto${usados > 1 ? "s" : ""} — não pode ser editado, para não desalinhar o custo que já foi calculado e travado nesses produtos. Cadastre um novo serviço se precisar de um valor diferente.`,
+      );
+      return;
+    }
     setEditandoId(sf.id);
     setForm({
       fornecedorId: sf.fornecedor_id,
@@ -147,13 +201,31 @@ export function ServicosScreen() {
       custoPorMinuto: sf.custo_por_minuto != null ? String(sf.custo_por_minuto) : "",
       beneficiamento: sf.beneficiamento,
     });
+    const b = beneficiamentoDoServico(sf.id);
+    if (b) {
+      setEditandoBeneficiamentoId(b.id);
+      setBenef({
+        fornecedorOrigemId: b.compra_insumo_origem?.fornecedor_id ?? null,
+        materialOrigemId: b.material_origem_id,
+        materialResultanteId: b.material_resultante_id,
+        corResultante: b.material_resultante.cor ?? "",
+        quantidade: String(b.quantidade_beneficiada),
+        custo: String(b.custo_beneficiamento),
+        data: b.compra_insumo_resultante?.data_compra ?? new Date().toISOString().slice(0, 10),
+      });
+    } else {
+      setEditandoBeneficiamentoId(null);
+      setBenef(beneficiamentoVazio());
+    }
     setErro(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function cancelarEdicao() {
     setEditandoId(null);
+    setEditandoBeneficiamentoId(null);
     setForm(FORM_VAZIO);
+    setBenef(beneficiamentoVazio());
     setErro(null);
   }
 
@@ -182,6 +254,24 @@ export function ServicosScreen() {
       setErro("Selecione a coleção para este serviço 'por coleção'.");
       return;
     }
+    if (form.beneficiamento) {
+      if (!benef.fornecedorOrigemId || !benef.materialOrigemId || !benef.materialResultanteId) {
+        setErro("Preencha o fornecedor de origem, o material de origem e o material resultante do beneficiamento.");
+        return;
+      }
+      if (quantidadeBenefNum <= 0) {
+        setErro("Informe a quantidade beneficiada.");
+        return;
+      }
+      if (!compraOrigem) {
+        setErro(
+          `Não há compra de "${materiais.find((m) => m.id === benef.materialOrigemId)?.nome}" registrada com ${
+            fornecedores.find((f) => f.id === benef.fornecedorOrigemId)?.nome
+          } na tela de Insumos. Cadastre essa compra primeiro.`,
+        );
+        return;
+      }
+    }
 
     const payload = {
       fornecedorId: form.fornecedorId,
@@ -193,20 +283,64 @@ export function ServicosScreen() {
       categoriaIds: form.categoriaIds,
     };
 
+    if (form.beneficiamento && benef.corResultante.trim()) {
+      const materialResultanteAtual = materiais.find((m) => m.id === benef.materialResultanteId);
+      if (benef.corResultante.trim() !== (materialResultanteAtual?.cor ?? "")) {
+        await updateMaterial.mutateAsync({ id: benef.materialResultanteId!, cor: benef.corResultante.trim() });
+      }
+    }
+
     if (editandoId) {
       await updateServicoFornecedor.mutateAsync({ id: editandoId, ...payload });
+      if (form.beneficiamento && compraOrigem) {
+        if (editandoBeneficiamentoId) {
+          await updateBeneficiamento.mutateAsync({
+            id: editandoBeneficiamentoId,
+            materialOrigemId: benef.materialOrigemId!,
+            compraInsumoOrigemId: compraOrigem.id!,
+            materialResultanteId: benef.materialResultanteId!,
+            quantidadeBeneficiada: quantidadeBenefNum,
+            custoOrigemUnitario,
+            custoBeneficiamento: custoBenefNum,
+            dataCompra: benef.data,
+          });
+        } else {
+          await aplicarBeneficiamento.mutateAsync({
+            servicoFornecedorId: editandoId,
+            fornecedorId: form.fornecedorId,
+            materialOrigemId: benef.materialOrigemId!,
+            compraInsumoOrigemId: compraOrigem.id!,
+            materialResultanteId: benef.materialResultanteId!,
+            quantidadeBeneficiada: quantidadeBenefNum,
+            custoOrigemUnitario,
+            custoBeneficiamento: custoBenefNum,
+            regimeTributario: compraOrigem.regime_tributario ?? "simples_nacional",
+            dataCompra: benef.data,
+          });
+        }
+      }
       cancelarEdicao();
       return;
     }
 
     const criado = await createServicoFornecedor.mutateAsync(payload);
-    setForm(FORM_VAZIO);
-    if (payload.beneficiamento) {
-      setBeneficiarId(criado.id);
+    if (form.beneficiamento && compraOrigem) {
+      await aplicarBeneficiamento.mutateAsync({
+        servicoFornecedorId: criado.id,
+        fornecedorId: form.fornecedorId,
+        materialOrigemId: benef.materialOrigemId!,
+        compraInsumoOrigemId: compraOrigem.id!,
+        materialResultanteId: benef.materialResultanteId!,
+        quantidadeBeneficiada: quantidadeBenefNum,
+        custoOrigemUnitario,
+        custoBeneficiamento: custoBenefNum,
+        regimeTributario: compraOrigem.regime_tributario ?? "simples_nacional",
+        dataCompra: benef.data,
+      });
     }
+    setForm(FORM_VAZIO);
+    setBenef(beneficiamentoVazio());
   }
-
-  const beneficiarServico = servicosFornecedor.find((sf) => sf.id === beneficiarId) ?? null;
 
   return (
     <div>
@@ -349,18 +483,121 @@ export function ServicosScreen() {
               hint={
                 <InfoTooltip>
                   Marque quando o fornecedor recebe uma matéria-prima sua e devolve outra — ex: estamparia (tecido cru
-                  vira tecido estampado), tingimento, lavanderia. Ao cadastrar o serviço, a tela de registro do
-                  beneficiamento abre automaticamente — e você pode voltar nela quando quiser para lançar novos lotes.
+                  vira tecido estampado), tingimento, lavanderia. Os campos abaixo aparecem para você detalhar essa
+                  transformação, e são salvos junto com o serviço.
                 </InfoTooltip>
               }
             />
           </div>
 
+          {form.beneficiamento && (
+            <div className="col-span-2 grid grid-cols-2 gap-4 rounded-md border border-border p-4">
+              <Field
+                label="Fornecedor de origem (quem vendeu o material)"
+                hint={
+                  <InfoTooltip>
+                    Pode ser diferente do fornecedor do serviço acima — é quem vendeu a matéria-prima que vai ser
+                    beneficiada, cadastrado na tela de Insumos.
+                  </InfoTooltip>
+                }
+              >
+                <Combobox
+                  options={fornecedores.map((f) => ({ id: f.id, label: f.nome }))}
+                  value={benef.fornecedorOrigemId}
+                  onChange={(v) => setBenef((b) => ({ ...b, fornecedorOrigemId: v, materialOrigemId: null }))}
+                  placeholder="Selecionar fornecedor..."
+                />
+              </Field>
+              <Field
+                label="Material de origem (o que sai do estoque)"
+                hint={<InfoTooltip>Só mostra materiais já comprados desse fornecedor.</InfoTooltip>}
+              >
+                <Combobox
+                  options={materiaisOrigemDisponiveis.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
+                  value={benef.materialOrigemId}
+                  onChange={(v) => setBenef((b) => ({ ...b, materialOrigemId: v }))}
+                  disabled={!benef.fornecedorOrigemId}
+                  placeholder={benef.fornecedorOrigemId ? "Selecionar material..." : "Selecione o fornecedor de origem primeiro"}
+                />
+              </Field>
+
+              <Field label="Material resultante (o que entra no estoque)">
+                <Combobox
+                  options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
+                  value={benef.materialResultanteId}
+                  onChange={(v) =>
+                    setBenef((b) => ({ ...b, materialResultanteId: v, corResultante: materiais.find((m) => m.id === v)?.cor ?? "" }))
+                  }
+                  onCreate={async (nome) => {
+                    const criado = await createMaterial.mutateAsync(nome);
+                    setBenef((b) => ({ ...b, materialResultanteId: criado.id }));
+                    return criado.id;
+                  }}
+                  placeholder="ex: Algodão estampa dinossauro (criar novo)"
+                />
+              </Field>
+              <Field
+                label="Cor do material resultante (opcional)"
+                hint={<InfoTooltip>Só é usada se você estiver criando um material novo agora, ao lado.</InfoTooltip>}
+              >
+                <Input
+                  value={benef.corResultante}
+                  onChange={(e) => setBenef((b) => ({ ...b, corResultante: e.target.value }))}
+                  placeholder="ex: dinossauro"
+                />
+              </Field>
+
+              <Field
+                label="Quantidade beneficiada (m)"
+                hint={
+                  <InfoTooltip>
+                    Quantos metros do material de origem foram enviados para o beneficiamento — essa mesma quantidade
+                    entra no estoque do material resultante.
+                  </InfoTooltip>
+                }
+              >
+                <Input type="number" min="0" step="any" value={benef.quantidade} onChange={(e) => setBenef((b) => ({ ...b, quantidade: e.target.value }))} />
+              </Field>
+              <Field label="Taxa de beneficiamento (R$ total)">
+                <Input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={benef.custo}
+                  onChange={(e) => setBenef((b) => ({ ...b, custo: e.target.value }))}
+                  placeholder="Valor cobrado pelo fornecedor"
+                />
+              </Field>
+              <Field label="Data">
+                <Input type="date" value={benef.data} onChange={(e) => setBenef((b) => ({ ...b, data: e.target.value }))} />
+              </Field>
+
+              {benef.fornecedorOrigemId && benef.materialOrigemId && !compraOrigem && (
+                <div className="col-span-2 text-sm text-destructive">
+                  Não há compra de "{materiais.find((m) => m.id === benef.materialOrigemId)?.nome}" registrada com{" "}
+                  {fornecedores.find((f) => f.id === benef.fornecedorOrigemId)?.nome} na tela de Insumos. Cadastre essa
+                  compra primeiro.
+                </div>
+              )}
+              {compraOrigem && quantidadeBenefNum > 0 && (
+                <div className="col-span-2 rounded-md bg-muted px-4 py-3 text-sm">
+                  Custo da origem: {formatNumber(quantidadeBenefNum)}m × {formatBRL(custoOrigemUnitario)} ={" "}
+                  {formatBRL(custoOrigemUnitario * quantidadeBenefNum)} + taxa {formatBRL(custoBenefNum)} ={" "}
+                  <strong>{formatBRL(custoOrigemUnitario * quantidadeBenefNum + custoBenefNum)}</strong> total → custo
+                  unitário do resultante: <strong>{formatBRL(custoUnitarioResultante)}/m</strong>
+                </div>
+              )}
+            </div>
+          )}
+
           {erro && <div className="col-span-2 text-sm text-destructive">{erro}</div>}
 
           <div className="col-span-2 flex gap-2">
-            <Button type="submit" disabled={createServicoFornecedor.isPending || updateServicoFornecedor.isPending}>
-              {createServicoFornecedor.isPending || updateServicoFornecedor.isPending
+            <Button
+              type="submit"
+              disabled={createServicoFornecedor.isPending || updateServicoFornecedor.isPending || aplicarBeneficiamento.isPending || updateBeneficiamento.isPending}
+            >
+              {createServicoFornecedor.isPending || updateServicoFornecedor.isPending || aplicarBeneficiamento.isPending || updateBeneficiamento.isPending
                 ? "Salvando..."
                 : editandoId
                   ? "Salvar alterações"
@@ -391,44 +628,53 @@ export function ServicosScreen() {
               </tr>
             </thead>
             <tbody>
-              {servicosFornecedor.map((sf) => (
-                <tr key={sf.id} className="border-b border-border/60">
-                  <td className="py-2 pr-4">{sf.fornecedor?.nome}</td>
-                  <td className="py-2 pr-4">
-                    {sf.servico?.nome}
-                    {sf.beneficiamento && (
-                      <span className="ml-2">
-                        <Badge tone="muted">Beneficiamento</Badge>
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <div className="flex flex-wrap gap-1">
-                      {sf.categorias.map((c) => (
-                        <Badge key={c.id}>{c.nome}</Badge>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-2 pr-4">{MODELO_PRECIFICACAO_LABELS[sf.modelo_precificacao]}</td>
-                  <td className="py-2 pr-4">{sf.colecao?.nome ?? "—"}</td>
-                  <td className="py-2 pr-4">{sf.custo_por_minuto ? formatBRL(sf.custo_por_minuto) : "—"}</td>
-                  <td className="py-2 pr-4">
-                    <div className="flex flex-wrap gap-3">
+              {servicosFornecedor.map((sf) => {
+                const usados = usoMap.get(sf.id) ?? 0;
+                const b = sf.beneficiamento ? beneficiamentoDoServico(sf.id) : null;
+                return (
+                  <tr key={sf.id} className="border-b border-border/60">
+                    <td className="py-2 pr-4">{sf.fornecedor?.nome}</td>
+                    <td className="py-2 pr-4">
+                      {sf.servico?.nome}
                       {sf.beneficiamento && (
-                        <button type="button" className="underline" onClick={() => setBeneficiarId(sf.id)}>
-                          Registrar beneficiamento
-                        </button>
+                        <div className="mt-1">
+                          <Badge tone="muted">Beneficiamento</Badge>
+                          {b && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {labelMaterial(b.material_origem)} → {labelMaterial(b.material_resultante)}
+                            </div>
+                          )}
+                        </div>
                       )}
-                      <button type="button" className="underline" onClick={() => iniciarEdicao(sf)}>
-                        Editar
-                      </button>
-                      <button type="button" className="text-destructive" onClick={() => handleExcluir(sf.id)}>
-                        Excluir
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <div className="flex flex-wrap gap-1">
+                        {sf.categorias.map((c) => (
+                          <Badge key={c.id}>{c.nome}</Badge>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-4">{MODELO_PRECIFICACAO_LABELS[sf.modelo_precificacao]}</td>
+                    <td className="py-2 pr-4">{sf.colecao?.nome ?? "—"}</td>
+                    <td className="py-2 pr-4">{sf.custo_por_minuto ? formatBRL(sf.custo_por_minuto) : "—"}</td>
+                    <td className="py-2 pr-4">
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          className={usados > 0 ? "underline text-muted-foreground" : "underline"}
+                          onClick={() => iniciarEdicao(sf)}
+                          title={usados > 0 ? `Já usado em ${usados} produto(s) — não pode ser editado` : undefined}
+                        >
+                          Editar
+                        </button>
+                        <button type="button" className="text-destructive" onClick={() => handleExcluir(sf.id)}>
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {servicosFornecedor.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-6 text-center text-muted-foreground">
@@ -440,241 +686,6 @@ export function ServicosScreen() {
           </table>
         </div>
       </Card>
-
-      {beneficiarServico && (
-        <BeneficiamentoModal servico={beneficiarServico} onClose={() => setBeneficiarId(null)} />
-      )}
-    </div>
-  );
-}
-
-function BeneficiamentoModal({
-  servico,
-  onClose,
-}: {
-  servico: ServicoFornecedorCompleto;
-  onClose: () => void;
-}) {
-  const { data: materiais = [] } = useMateriais();
-  const { data: fornecedores = [] } = useFornecedores();
-  const createMaterial = useCreateMaterial();
-  const updateMaterial = useUpdateMaterial();
-  const { data: historico = [] } = useBeneficiamentosPorServico(servico.id);
-  const aplicar = useAplicarBeneficiamento();
-
-  const [fornecedorOrigemId, setFornecedorOrigemId] = useState<string | null>(null);
-  const [materialOrigemId, setMaterialOrigemId] = useState<string | null>(null);
-  const [materialResultanteId, setMaterialResultanteId] = useState<string | null>(null);
-  const [corResultante, setCorResultante] = useState("");
-  const [quantidade, setQuantidade] = useState("");
-  const [custoBeneficiamento, setCustoBeneficiamento] = useState("");
-  const [dataCompra, setDataCompra] = useState(() => new Date().toISOString().slice(0, 10));
-  const [erro, setErro] = useState<string | null>(null);
-  const [sucesso, setSucesso] = useState(false);
-
-  const { data: compraOrigem } = useUltimaCompraPorFornecedorMaterial(fornecedorOrigemId, materialOrigemId);
-
-  const quantidadeNum = Number(quantidade) || 0;
-  const custoBeneficiamentoNum = Number(custoBeneficiamento) || 0;
-  const custoOrigemUnitario = compraOrigem?.preco_unitario_liquido ?? 0;
-  const custoUnitarioResultante =
-    quantidadeNum > 0 ? (custoOrigemUnitario * quantidadeNum + custoBeneficiamentoNum) / quantidadeNum : 0;
-
-  async function handleAplicar() {
-    setErro(null);
-    if (!fornecedorOrigemId || !materialOrigemId || !materialResultanteId) {
-      setErro("Selecione o fornecedor de origem, o material de origem e o material resultante.");
-      return;
-    }
-    if (!compraOrigem) {
-      setErro(
-        `Não há compra de "${materiais.find((m) => m.id === materialOrigemId)?.nome}" registrada com ${
-          fornecedores.find((f) => f.id === fornecedorOrigemId)?.nome
-        } na tela de Insumos. Cadastre essa compra primeiro.`,
-      );
-      return;
-    }
-    if (quantidadeNum <= 0) {
-      setErro("Informe a quantidade beneficiada.");
-      return;
-    }
-    const materialResultanteAtual = materiais.find((m) => m.id === materialResultanteId);
-    if (corResultante.trim() && corResultante.trim() !== (materialResultanteAtual?.cor ?? "")) {
-      await updateMaterial.mutateAsync({ id: materialResultanteId, cor: corResultante.trim() });
-    }
-    await aplicar.mutateAsync({
-      servicoFornecedorId: servico.id,
-      fornecedorId: servico.fornecedor_id,
-      materialOrigemId,
-      compraInsumoOrigemId: compraOrigem.id,
-      materialResultanteId,
-      quantidadeBeneficiada: quantidadeNum,
-      custoOrigemUnitario,
-      custoBeneficiamento: custoBeneficiamentoNum,
-      regimeTributario: compraOrigem.regime_tributario ?? "simples_nacional",
-      dataCompra,
-    });
-    setSucesso(true);
-    setMaterialOrigemId(null);
-    setMaterialResultanteId(null);
-    setCorResultante("");
-    setQuantidade("");
-    setCustoBeneficiamento("");
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto" onClick={(e) => e.stopPropagation()}>
-        <Card>
-          <div className="mb-4 flex items-start justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Registrar beneficiamento</h2>
-              <p className="text-sm text-muted-foreground">
-                {servico.fornecedor.nome} — {servico.servico.nome}
-              </p>
-            </div>
-            <button type="button" className="text-muted-foreground" onClick={onClose}>
-              Fechar
-            </button>
-          </div>
-
-          <p className="mb-4 text-sm text-muted-foreground">
-            Escolha quem vendeu a matéria-prima de origem e a matéria-prima que sai do estoque, e a matéria-prima nova
-            que entra no lugar dela. O sistema calcula o custo unitário do material resultante somando o custo da
-            origem + a taxa cobrada por {servico.fornecedor.nome}, dividido pela quantidade — e já ajusta os dois
-            estoques automaticamente.
-          </p>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field
-              label="Fornecedor de origem (quem vendeu o material)"
-              hint={
-                <InfoTooltip>
-                  Pode ser diferente de {servico.fornecedor.nome} — é o fornecedor de quem você comprou a matéria-prima
-                  que vai ser beneficiada, cadastrado na tela de Insumos.
-                </InfoTooltip>
-              }
-            >
-              <Combobox
-                options={fornecedores.map((f) => ({ id: f.id, label: f.nome }))}
-                value={fornecedorOrigemId}
-                onChange={setFornecedorOrigemId}
-                placeholder="Selecionar fornecedor..."
-              />
-            </Field>
-            <Field label="Material de origem (o que sai do estoque)">
-              <Combobox
-                options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
-                value={materialOrigemId}
-                onChange={setMaterialOrigemId}
-                placeholder="ex: Algodão cru — verde"
-              />
-            </Field>
-
-            <Field label="Material resultante (o que entra no estoque)">
-              <Combobox
-                options={materiais.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
-                value={materialResultanteId}
-                onChange={(id) => {
-                  setMaterialResultanteId(id);
-                  setCorResultante(materiais.find((m) => m.id === id)?.cor ?? "");
-                }}
-                onCreate={async (nome) => {
-                  const criado = await createMaterial.mutateAsync(nome);
-                  if (corResultante.trim()) await updateMaterial.mutateAsync({ id: criado.id, cor: corResultante.trim() });
-                  return criado.id;
-                }}
-                placeholder="ex: Algodão estampa dinossauro (criar novo)"
-              />
-            </Field>
-            <Field
-              label="Cor do material resultante (opcional)"
-              hint={<InfoTooltip>Só é usada se você estiver criando um material novo agora, ao lado.</InfoTooltip>}
-            >
-              <Input value={corResultante} onChange={(e) => setCorResultante(e.target.value)} placeholder="ex: dinossauro" />
-            </Field>
-
-            <Field
-              label="Quantidade beneficiada (m)"
-              hint={
-                <InfoTooltip>
-                  Quantos metros do material de origem foram enviados para o beneficiamento — essa mesma quantidade
-                  entra no estoque do material resultante.
-                </InfoTooltip>
-              }
-            >
-              <Input type="number" min="0" step="any" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} />
-            </Field>
-            <Field label="Taxa de beneficiamento (R$ total)">
-              <Input
-                type="number"
-                min="0"
-                step="any"
-                value={custoBeneficiamento}
-                onChange={(e) => setCustoBeneficiamento(e.target.value)}
-                placeholder="Valor cobrado pelo fornecedor"
-              />
-            </Field>
-            <Field label="Data">
-              <Input type="date" value={dataCompra} onChange={(e) => setDataCompra(e.target.value)} />
-            </Field>
-          </div>
-
-          {fornecedorOrigemId && materialOrigemId && !compraOrigem && (
-            <div className="mt-4 text-sm text-destructive">
-              Não há compra de "{materiais.find((m) => m.id === materialOrigemId)?.nome}" registrada com{" "}
-              {fornecedores.find((f) => f.id === fornecedorOrigemId)?.nome} na tela de Insumos. Cadastre essa compra
-              primeiro (o material resultante é novo, então é normal ele não ter histórico — o histórico precisa
-              existir é para o material de origem).
-            </div>
-          )}
-          {compraOrigem && quantidadeNum > 0 && (
-            <div className="mt-4 rounded-md bg-muted px-4 py-3 text-sm">
-              Custo da origem: {formatNumber(quantidadeNum)}m × {formatBRL(custoOrigemUnitario)} ={" "}
-              {formatBRL(custoOrigemUnitario * quantidadeNum)} + taxa {formatBRL(custoBeneficiamentoNum)} ={" "}
-              <strong>{formatBRL(custoOrigemUnitario * quantidadeNum + custoBeneficiamentoNum)}</strong> total → custo
-              unitário do resultante: <strong>{formatBRL(custoUnitarioResultante)}/m</strong>
-            </div>
-          )}
-
-          {erro && <div className="mt-4 text-sm text-destructive">{erro}</div>}
-          {sucesso && <div className="mt-4 text-sm text-success">Beneficiamento registrado e estoque atualizado.</div>}
-
-          <div className="mt-4 flex justify-end">
-            <Button onClick={handleAplicar} disabled={aplicar.isPending}>
-              {aplicar.isPending ? "Registrando..." : "Registrar beneficiamento"}
-            </Button>
-          </div>
-
-          {historico.length > 0 && (
-            <div className="mt-6 border-t border-border pt-4">
-              <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Histórico</h3>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-1 pr-4">Data</th>
-                    <th className="py-1 pr-4">Origem</th>
-                    <th className="py-1 pr-4">Resultante</th>
-                    <th className="py-1 pr-4">Quantidade</th>
-                    <th className="py-1 pr-4">Taxa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historico.map((h) => (
-                    <tr key={h.id} className="border-b border-border/60">
-                      <td className="py-1 pr-4">{formatDate(h.criado_em)}</td>
-                      <td className="py-1 pr-4">{labelMaterial(h.material_origem)}</td>
-                      <td className="py-1 pr-4">{labelMaterial(h.material_resultante)}</td>
-                      <td className="py-1 pr-4">{formatNumber(h.quantidade_beneficiada)}m</td>
-                      <td className="py-1 pr-4">{formatBRL(h.custo_beneficiamento)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
     </div>
   );
 }

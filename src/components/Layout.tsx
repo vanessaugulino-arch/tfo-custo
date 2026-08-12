@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: "/produtos/novo", label: "Novo produto" },
   { to: "/colecoes", label: "Coleções" },
   { to: "/estoque", label: "Estoque" },
+  { to: "/relatorios", label: "Relatórios" },
 ];
 
 export function Layout() {

@@ -512,19 +512,24 @@ export function useFecharColecao() {
 export type ServicoBeneficiamentoCompleto = Tables["servico_beneficiamento"]["Row"] & {
   material_origem: Tables["materiais"]["Row"];
   material_resultante: Tables["materiais"]["Row"];
+  compra_insumo_origem: { fornecedor_id: string } | null;
+  compra_insumo_resultante: { data_compra: string } | null;
 };
 
-export function useBeneficiamentosPorServico(servicoFornecedorId: string | null) {
+/**
+ * Todos os beneficiamentos, com a origem/resultante e o fornecedor de origem já resolvidos —
+ * usado para pré-preencher a edição (na prática hoje existe no máximo 1 por serviço, já que a
+ * tela só cria um na hora de cadastrar o serviço e depois só permite editar esse mesmo registro).
+ */
+export function useTodosBeneficiamentos() {
   return useQuery({
-    queryKey: ["servico_beneficiamento", servicoFornecedorId],
-    enabled: !!servicoFornecedorId,
+    queryKey: ["servico_beneficiamento_todos"],
     queryFn: async (): Promise<ServicoBeneficiamentoCompleto[]> => {
       const { data, error } = await supabase
         .from("servico_beneficiamento")
         .select(
-          "*, material_origem:materiais!servico_beneficiamento_material_origem_id_fkey(*), material_resultante:materiais!servico_beneficiamento_material_resultante_id_fkey(*)",
+          "*, material_origem:materiais!servico_beneficiamento_material_origem_id_fkey(*), material_resultante:materiais!servico_beneficiamento_material_resultante_id_fkey(*), compra_insumo_origem:compras_insumo!servico_beneficiamento_compra_insumo_origem_id_fkey(fornecedor_id), compra_insumo_resultante:compras_insumo!servico_beneficiamento_compra_insumo_resultante_id_fkey(data_compra)",
         )
-        .eq("servico_fornecedor_id", servicoFornecedorId!)
         .order("criado_em", { ascending: false });
       if (error) throw error;
       return data as any;
@@ -617,7 +622,120 @@ export function useAplicarBeneficiamento() {
       qc.invalidateQueries({ queryKey: ["compras_insumo"] });
       qc.invalidateQueries({ queryKey: ["estoque"] });
       qc.invalidateQueries({ queryKey: ["movimentos_estoque"] });
-      qc.invalidateQueries({ queryKey: ["servico_beneficiamento"] });
+      qc.invalidateQueries({ queryKey: ["servico_beneficiamento_todos"] });
+    },
+  });
+}
+
+interface EdicaoBeneficiamento {
+  id: string;
+  materialOrigemId: string;
+  compraInsumoOrigemId: string;
+  materialResultanteId: string;
+  quantidadeBeneficiada: number;
+  custoOrigemUnitario: number;
+  custoBeneficiamento: number;
+  dataCompra: string;
+}
+
+/**
+ * Corrige um beneficiamento já registrado — atualiza a "compra" do resultante e os dois
+ * movimentos de estoque (entrada/saída) para os novos valores, sem duplicar histórico. Só deve
+ * ser chamado quando o serviço ainda não foi usado em nenhum produto (ver useServicoFornecedorUsoCount).
+ */
+export function useUpdateBeneficiamento() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: EdicaoBeneficiamento) => {
+      const { data: atual, error: eBusca } = await supabase
+        .from("servico_beneficiamento")
+        .select("*")
+        .eq("id", input.id)
+        .single();
+      if (eBusca) throw eBusca;
+
+      const custoTotalResultante = input.custoOrigemUnitario * input.quantidadeBeneficiada + input.custoBeneficiamento;
+
+      const { error: eCompra } = await supabase
+        .from("compras_insumo")
+        .update({
+          material_id: input.materialResultanteId,
+          quantidade_comprada: input.quantidadeBeneficiada,
+          preco_pago: custoTotalResultante,
+          data_compra: input.dataCompra,
+        })
+        .eq("id", atual.compra_insumo_resultante_id);
+      if (eCompra) throw eCompra;
+
+      const { error: eEntrada } = await supabase
+        .from("movimentos_estoque")
+        .update({ material_id: input.materialResultanteId, quantidade: input.quantidadeBeneficiada })
+        .eq("referencia_id", atual.compra_insumo_resultante_id)
+        .eq("tipo", "entrada_beneficiamento");
+      if (eEntrada) throw eEntrada;
+
+      const { error: eSaida } = await supabase
+        .from("movimentos_estoque")
+        .update({ material_id: input.materialOrigemId, quantidade: -input.quantidadeBeneficiada })
+        .eq("referencia_id", atual.compra_insumo_resultante_id)
+        .eq("tipo", "saida_beneficiamento");
+      if (eSaida) throw eSaida;
+
+      const { error } = await supabase
+        .from("servico_beneficiamento")
+        .update({
+          material_origem_id: input.materialOrigemId,
+          compra_insumo_origem_id: input.compraInsumoOrigemId,
+          material_resultante_id: input.materialResultanteId,
+          quantidade_beneficiada: input.quantidadeBeneficiada,
+          custo_beneficiamento: input.custoBeneficiamento,
+        })
+        .eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["compras_insumo"] });
+      qc.invalidateQueries({ queryKey: ["estoque"] });
+      qc.invalidateQueries({ queryKey: ["movimentos_estoque"] });
+      qc.invalidateQueries({ queryKey: ["servico_beneficiamento_todos"] });
+    },
+  });
+}
+
+/** Materiais já comprados de um fornecedor específico — usado para filtrar a origem do beneficiamento. */
+export function useMateriaisPorFornecedor(fornecedorId: string | null) {
+  return useQuery({
+    queryKey: ["materiais_por_fornecedor", fornecedorId],
+    enabled: !!fornecedorId,
+    queryFn: async (): Promise<Tables["materiais"]["Row"][]> => {
+      const { data, error } = await supabase
+        .from("compras_insumo")
+        .select("material:materiais(*)")
+        .eq("fornecedor_id", fornecedorId!);
+      if (error) throw error;
+      const vistos = new Set<string>();
+      const materiais: Tables["materiais"]["Row"][] = [];
+      for (const row of (data ?? []) as any[]) {
+        if (row.material && !vistos.has(row.material.id)) {
+          vistos.add(row.material.id);
+          materiais.push(row.material);
+        }
+      }
+      return materiais;
+    },
+  });
+}
+
+/** Quantos produtos já usam cada serviço — um serviço em uso não pode mais ser editado (só excluído, se possível). */
+export function useServicoFornecedorUsoCount() {
+  return useQuery({
+    queryKey: ["servico_fornecedor_uso"],
+    queryFn: async (): Promise<Map<string, number>> => {
+      const { data, error } = await supabase.from("produto_servicos").select("servico_fornecedor_id");
+      if (error) throw error;
+      const mapa = new Map<string, number>();
+      (data ?? []).forEach((r) => mapa.set(r.servico_fornecedor_id, (mapa.get(r.servico_fornecedor_id) ?? 0) + 1));
+      return mapa;
     },
   });
 }

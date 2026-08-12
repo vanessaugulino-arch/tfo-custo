@@ -11,6 +11,7 @@ import { NovoProdutoScreen } from "@/screens/NovoProdutoScreen";
 import { ColecoesScreen } from "@/screens/ColecoesScreen";
 import { EstoqueScreen } from "@/screens/EstoqueScreen";
 import { ProducaoInternaScreen } from "@/screens/ProducaoInternaScreen";
+import { RelatoriosScreen } from "@/screens/RelatoriosScreen";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/colecoes" element={<ColecoesScreen />} />
         <Route path="/estoque" element={<EstoqueScreen />} />
         <Route path="/producao-interna" element={<ProducaoInternaScreen />} />
+        <Route path="/relatorios" element={<RelatoriosScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

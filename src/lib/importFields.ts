@@ -41,9 +41,8 @@ export const MODELO_SERVICOS: ModeloImport = {
     { id: "categorias", label: "Categorias atendidas", tipo: "texto", obrigatorio: false, keywords: ["categoria", "categorias"], explicacao: "Uma ou mais categorias separadas por vírgula (ex: Camisa, Calça). Categorias novas são criadas automaticamente." },
     { id: "modelo_precificacao", label: "Modelo de precificação", tipo: "texto", obrigatorio: true, keywords: ["modelo", "precificação", "precificacao"], explicacao: "peca_desenvolvida, peca_produzida ou tempo. O modelo 'colecao' precisa ser cadastrado manualmente (exige escolher a coleção)." },
     { id: "custo_por_minuto", label: "Custo por minuto (R$)", tipo: "monetario", obrigatorio: false, keywords: ["minuto", "custo por minuto"], explicacao: "Obrigatório apenas quando o modelo é 'tempo'." },
-    { id: "beneficiamento", label: "É beneficiamento?", tipo: "texto", obrigatorio: false, keywords: ["beneficiamento", "transforma"], explicacao: "'sim' apenas para serviços que transformam um insumo em outro (ex: estamparia, tingimento). Deixe em branco para 'não'. Depois de importar, registre cada beneficiamento na tela de Serviços." },
   ],
-  linhaExemplo: ["AJW", "Corte", "Camisa, Calça", "peca_desenvolvida", "", "não"],
+  linhaExemplo: ["AJW", "Corte", "Camisa, Calça", "peca_desenvolvida", ""],
 };
 
 export const MODELO_ESTOQUE: ModeloImport = {
