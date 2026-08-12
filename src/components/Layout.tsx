@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePerfilNegocio } from "@/hooks/useData";
 import { OnboardingChecklist } from "./OnboardingChecklist";
@@ -47,6 +47,12 @@ export function Layout() {
         </nav>
         <div className="border-t border-sidebar-border pt-3 mt-3">
           <div className="text-xs text-sidebar-foreground/60 truncate mb-2">{user?.email}</div>
+          <Link
+            to="/configuracoes"
+            className="block mb-2 text-sm text-sidebar-foreground/80 hover:text-sidebar-foreground transition-colors"
+          >
+            Configurações do negócio
+          </Link>
           <button
             onClick={signOut}
             className="text-sm text-sidebar-foreground/80 hover:text-sidebar-foreground transition-colors"

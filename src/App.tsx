@@ -31,6 +31,7 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/configuracoes" element={<OnboardingWizard modo="configuracoes" />} />
       <Route element={<Layout />}>
         <Route index element={<InicioScreen />} />
         <Route path="/inicio" element={<InicioScreen />} />

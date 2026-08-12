@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePerfilNegocio, useSalvarPerfilNegocio, type PerfilNegocio } from "@/hooks/useData";
 import { REGIME_LABELS } from "@/lib/format";
@@ -35,9 +35,11 @@ interface OnboardingLayoutProps {
   painelTitulo?: string;
   podeContinuar: boolean;
   aoContinuar: () => void;
+  aoVoltar?: () => void;
   proximoTexto?: string;
   carregando?: boolean;
   textoBotao?: string;
+  modo?: "onboarding" | "configuracoes";
 }
 
 function OnboardingLayout({
@@ -50,9 +52,11 @@ function OnboardingLayout({
   painelTitulo,
   podeContinuar,
   aoContinuar,
+  aoVoltar,
   proximoTexto,
   carregando,
   textoBotao,
+  modo,
 }: OnboardingLayoutProps) {
   const { user } = useAuth();
   const primeiroNome = user?.email ? capitalize(user.email.split("@")[0].split(/[.\-_0-9]/)[0]) : "";
@@ -60,6 +64,11 @@ function OnboardingLayout({
   return (
     <div className="min-h-screen bg-background px-6 py-10 md:px-16">
       <div className="max-w-6xl mx-auto">
+        {modo === "configuracoes" && (
+          <Link to="/inicio" className="mb-4 inline-block text-sm text-muted-foreground underline">
+            ← Voltar para o app sem salvar
+          </Link>
+        )}
         <div className="flex flex-col md:flex-row justify-between gap-6 mb-10">
           <div>
             <h1 className="text-3xl md:text-4xl font-serif text-foreground">Olá{primeiroNome ? `, ${primeiroNome}` : ""}.</h1>
@@ -97,6 +106,16 @@ function OnboardingLayout({
             >
               {carregando ? "Salvando..." : (textoBotao ?? "Continuar →")}
             </button>
+            {aoVoltar && (
+              <button
+                type="button"
+                onClick={aoVoltar}
+                disabled={carregando}
+                className="w-full rounded-md px-4 py-2.5 text-sm font-medium border border-border hover:bg-muted disabled:opacity-40 transition-colors"
+              >
+                ← Voltar
+              </button>
+            )}
             {proximoTexto && <p className="text-xs text-muted-foreground text-center">{proximoTexto}</p>}
           </div>
         </div>
@@ -200,7 +219,12 @@ type Rascunho = Partial<PerfilNegocio>;
 
 type EtapaKey = "marca" | "negocio" | "como_funciona" | "producao_interna" | "regime" | "final";
 
-export function OnboardingWizard() {
+interface OnboardingWizardProps {
+  /** "onboarding" (padrão) trava o app até concluir; "configuracoes" é uma edição normal, acessível a qualquer momento. */
+  modo?: "onboarding" | "configuracoes";
+}
+
+export function OnboardingWizard({ modo = "onboarding" }: OnboardingWizardProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: perfilExistente } = usePerfilNegocio(user?.id);
@@ -220,6 +244,8 @@ export function OnboardingWizard() {
   ];
   const etapaAtual = ordemEtapas.indexOf(etapa) + 1;
   const totalEtapas = ordemEtapas.length;
+  const indiceAtual = ordemEtapas.indexOf(etapa);
+  const aoVoltar = indiceAtual > 0 ? () => setEtapa(ordemEtapas[indiceAtual - 1]) : undefined;
 
   function atualizar<K extends keyof Rascunho>(campo: K, valor: Rascunho[K]) {
     setRascunho((prev) => ({ ...prev, [campo]: valor }));
@@ -237,6 +263,7 @@ export function OnboardingWizard() {
       <OnboardingLayout
         etapaAtual={etapaAtual}
         totalEtapas={totalEtapas}
+        modo={modo}
         tituloDestaque="Conta da sua marca."
         descricaoDireita="Esses dados orientam todas as leituras da plataforma: benchmark de segmento, faixa esperada de margem e mix de coleção."
         painelTitulo="Canal principal"
@@ -258,6 +285,7 @@ export function OnboardingWizard() {
           </div>
         }
         podeContinuar={!!rascunho.nome_marca?.trim() && (rascunho.segmento?.length ?? 0) > 0 && (rascunho.canal_principal?.length ?? 0) > 0}
+        aoVoltar={aoVoltar}
         aoContinuar={() => salvarEAvancar(rascunho, "negocio")}
         proximoTexto="Próximo: faturamento, estágio e modelo"
         carregando={salvar.isPending}
@@ -298,6 +326,7 @@ export function OnboardingWizard() {
       <OnboardingLayout
         etapaAtual={etapaAtual}
         totalEtapas={totalEtapas}
+        modo={modo}
         tituloDestaque="Sobre o seu negócio."
         descricaoDireita="Ajuda a calibrar comparações e alertas ao longo da ferramenta."
         painelTitulo="Modelo de produção"
@@ -324,6 +353,7 @@ export function OnboardingWizard() {
           </div>
         }
         podeContinuar={!!rascunho.faturamento_faixa && !!rascunho.estagio && !!rascunho.modelo_producao}
+        aoVoltar={aoVoltar}
         aoContinuar={() => salvarEAvancar(rascunho, "como_funciona")}
         proximoTexto="Próximo: como o TFO Custos funciona"
         carregando={salvar.isPending}
@@ -355,9 +385,11 @@ export function OnboardingWizard() {
       <OnboardingLayout
         etapaAtual={etapaAtual}
         totalEtapas={totalEtapas}
+        modo={modo}
         tituloDestaque="Como o TFO Custos funciona."
         descricaoDireita="Quatro passos entre o insumo comprado e o custo final da peça."
         podeContinuar
+        aoVoltar={aoVoltar}
         aoContinuar={() => salvarEAvancar({}, mostrarProducaoInterna ? "producao_interna" : "regime")}
         proximoTexto={mostrarProducaoInterna ? "Próximo: produção interna" : "Próximo: regime tributário padrão"}
         carregando={salvar.isPending}
@@ -382,9 +414,11 @@ export function OnboardingWizard() {
       <OnboardingLayout
         etapaAtual={etapaAtual}
         totalEtapas={totalEtapas}
+        modo={modo}
         tituloDestaque="Custo da sua produção interna."
         descricaoDireita="Transforma a folha de pagamento da sua equipe em um custo por peça, para somar ao custo de insumos e serviços terceirizados."
         podeContinuar
+        aoVoltar={aoVoltar}
         aoContinuar={() => salvarEAvancar({}, "regime")}
         proximoTexto="Próximo: regime tributário padrão"
         carregando={salvar.isPending}
@@ -435,9 +469,11 @@ export function OnboardingWizard() {
       <OnboardingLayout
         etapaAtual={etapaAtual}
         totalEtapas={totalEtapas}
+        modo={modo}
         tituloDestaque="Regime tributário padrão."
         descricaoDireita="Usado como sugestão inicial ao registrar uma compra de insumo — você pode trocar em cada compra."
         podeContinuar={!!rascunho.regime_tributario_padrao}
+        aoVoltar={aoVoltar}
         aoContinuar={() => salvarEAvancar(rascunho, "final")}
         proximoTexto="Última etapa"
         carregando={salvar.isPending}
@@ -460,13 +496,41 @@ export function OnboardingWizard() {
     );
   }
 
+  if (modo === "configuracoes") {
+    return (
+      <OnboardingLayout
+        etapaAtual={etapaAtual}
+        totalEtapas={totalEtapas}
+        modo={modo}
+        tituloDestaque="Revise e salve."
+        descricaoDireita="Suas respostas ficam salvas — pode voltar aqui em Configurações sempre que precisar ajustar algo."
+        podeContinuar
+        aoVoltar={aoVoltar}
+        textoBotao="Salvar e voltar ao Início →"
+        aoContinuar={() => salvarEAvancar(rascunho, null)}
+        carregando={salvar.isPending}
+      >
+        <div className="rounded-lg border border-border bg-card p-8 max-w-xl">
+          <h3 className="font-serif text-2xl text-foreground mb-3">
+            {rascunho.nome_marca ? `Tudo certo, ${rascunho.nome_marca}.` : "Tudo certo."}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Confira as respostas nas etapas anteriores usando "Voltar" e clique em salvar quando terminar.
+          </p>
+        </div>
+      </OnboardingLayout>
+    );
+  }
+
   return (
     <OnboardingLayout
       etapaAtual={etapaAtual}
       totalEtapas={totalEtapas}
+        modo={modo}
       tituloDestaque="Pronto para começar."
       descricaoDireita="Seu perfil fica em Configurações — pode ajustar quando quiser."
       podeContinuar
+      aoVoltar={aoVoltar}
       textoBotao="Ir para o Início →"
       aoContinuar={() => salvarEAvancar({ onboarding_concluido: true }, null)}
       carregando={salvar.isPending}
