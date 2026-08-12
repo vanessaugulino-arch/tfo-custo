@@ -51,7 +51,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     targetId: "servicos-tabela",
     title: "Serviços já cadastrados",
-    texto: "Você pode editar ou excluir enquanto o serviço ainda não foi usado em nenhum produto — depois disso, para não desalinhar custos já calculados, só dá para excluir (se não tiver produto vinculado) ou cadastrar um novo.",
+    texto: "Você sempre pode editar as categorias atendidas, mesmo depois de usado em produtos. Fornecedor, tipo, modelo de precificação e os dados de beneficiamento só ficam travados após o primeiro uso, para não desalinhar custos já calculados — nesse caso, cadastre um novo serviço se precisar de um valor diferente.",
   },
 ];
 
@@ -129,6 +129,8 @@ export function ServicosScreen() {
   const [confirmandoBeneficiamento, setConfirmandoBeneficiamento] = useState(false);
 
   const isBeneficiamento = form.beneficiamento;
+  const usosDoServicoEmEdicao = editandoId ? usoMap.get(editandoId) ?? 0 : 0;
+  const bloqueiaCampoCusto = usosDoServicoEmEdicao > 0;
 
   const { data: materiaisOrigemDisponiveis = [] } = useMateriaisPorFornecedor(benef.fornecedorOrigemId);
   const { data: compraOrigem } = useUltimaCompraPorFornecedorMaterial(benef.fornecedorOrigemId, benef.materialOrigemId);
@@ -195,13 +197,6 @@ export function ServicosScreen() {
   }
 
   function iniciarEdicao(sf: ServicoFornecedorCompleto) {
-    const usados = usoMap.get(sf.id) ?? 0;
-    if (usados > 0) {
-      window.alert(
-        `Este serviço já foi usado em ${usados} produto${usados > 1 ? "s" : ""} — não pode ser editado, para não desalinhar o custo que já foi calculado e travado nesses produtos. Cadastre um novo serviço se precisar de um valor diferente.`,
-      );
-      return;
-    }
     setEditandoId(sf.id);
     setForm({
       fornecedorId: sf.fornecedor_id,
@@ -411,7 +406,9 @@ export function ServicosScreen() {
       <Card className="mb-8">
         {editandoId && (
           <div className="mb-4 flex items-center justify-between rounded-md bg-accent px-4 py-2 text-sm text-accent-foreground">
-            Editando serviço já cadastrado.
+            {bloqueiaCampoCusto
+              ? `Editando serviço já usado em ${usosDoServicoEmEdicao} produto${usosDoServicoEmEdicao > 1 ? "s" : ""} — fornecedor, tipo, modelo de precificação e os dados de beneficiamento ficam travados para não alterar custos já calculados. Você pode alterar as categorias atendidas.`
+              : "Editando serviço já cadastrado."}
             <button type="button" className="underline" onClick={cancelarEdicao}>
               Cancelar edição
             </button>
@@ -425,6 +422,7 @@ export function ServicosScreen() {
               onChange={(v) => setForm((f) => ({ ...f, fornecedorId: v }))}
               onCreate={async (nome) => (await createFornecedor.mutateAsync(nome)).id}
               placeholder="Selecionar ou cadastrar fornecedor..."
+              disabled={bloqueiaCampoCusto}
             />
           </Field>
           <Field label="Tipo de serviço">
@@ -434,6 +432,7 @@ export function ServicosScreen() {
               onChange={(v) => setForm((f) => ({ ...f, servicoId: v }))}
               onCreate={async (nome) => (await createServico.mutateAsync(nome)).id}
               placeholder="Selecionar ou cadastrar serviço..."
+              disabled={bloqueiaCampoCusto}
             />
           </Field>
 
@@ -492,7 +491,11 @@ export function ServicosScreen() {
               </InfoTooltip>
             }
           >
-            <Select value={form.modelo} onChange={(e) => handleModeloChange(e.target.value as ModeloPrecificacaoServico)}>
+            <Select
+              value={form.modelo}
+              onChange={(e) => handleModeloChange(e.target.value as ModeloPrecificacaoServico)}
+              disabled={bloqueiaCampoCusto}
+            >
               {MODELOS.map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -509,6 +512,7 @@ export function ServicosScreen() {
                 step="any"
                 value={form.custoPorMinuto}
                 onChange={(e) => setForm((f) => ({ ...f, custoPorMinuto: e.target.value }))}
+                disabled={bloqueiaCampoCusto}
               />
             </Field>
           )}
@@ -523,7 +527,11 @@ export function ServicosScreen() {
                 </InfoTooltip>
               }
             >
-              <Select value={form.colecaoId ?? ""} onChange={(e) => setForm((f) => ({ ...f, colecaoId: e.target.value || null }))}>
+              <Select
+                value={form.colecaoId ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, colecaoId: e.target.value || null }))}
+                disabled={bloqueiaCampoCusto}
+              >
                 <option value="">Selecionar coleção...</option>
                 {colecoes.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -557,6 +565,7 @@ export function ServicosScreen() {
                   value={benef.fornecedorOrigemId}
                   onChange={(v) => setBenef((b) => ({ ...b, fornecedorOrigemId: v, materialOrigemId: null }))}
                   placeholder="Selecionar fornecedor..."
+                  disabled={bloqueiaCampoCusto}
                 />
               </Field>
               <Field
@@ -567,7 +576,7 @@ export function ServicosScreen() {
                   options={materiaisOrigemDisponiveis.map((m) => ({ id: m.id, label: labelMaterial(m) }))}
                   value={benef.materialOrigemId}
                   onChange={(v) => setBenef((b) => ({ ...b, materialOrigemId: v }))}
-                  disabled={!benef.fornecedorOrigemId}
+                  disabled={bloqueiaCampoCusto || !benef.fornecedorOrigemId}
                   placeholder={benef.fornecedorOrigemId ? "Selecionar material..." : "Selecione o fornecedor de origem primeiro"}
                 />
               </Field>
@@ -585,6 +594,7 @@ export function ServicosScreen() {
                     return criado.id;
                   }}
                   placeholder="ex: Algodão estampa dinossauro (criar novo)"
+                  disabled={bloqueiaCampoCusto}
                 />
               </Field>
               <Field
@@ -601,6 +611,7 @@ export function ServicosScreen() {
                   value={benef.corResultante}
                   onChange={(e) => setBenef((b) => ({ ...b, corResultante: e.target.value }))}
                   placeholder="ex: dinossauro"
+                  disabled={bloqueiaCampoCusto}
                 />
               </Field>
 
@@ -613,7 +624,14 @@ export function ServicosScreen() {
                   </InfoTooltip>
                 }
               >
-                <Input type="number" min="0" step="any" value={benef.quantidade} onChange={(e) => setBenef((b) => ({ ...b, quantidade: e.target.value }))} />
+                <Input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={benef.quantidade}
+                  onChange={(e) => setBenef((b) => ({ ...b, quantidade: e.target.value }))}
+                  disabled={bloqueiaCampoCusto}
+                />
               </Field>
               <Field label="Taxa de beneficiamento (R$ total)">
                 <Input
@@ -623,10 +641,16 @@ export function ServicosScreen() {
                   value={benef.custo}
                   onChange={(e) => setBenef((b) => ({ ...b, custo: e.target.value }))}
                   placeholder="Valor cobrado pelo fornecedor"
+                  disabled={bloqueiaCampoCusto}
                 />
               </Field>
               <Field label="Data">
-                <Input type="date" value={benef.data} onChange={(e) => setBenef((b) => ({ ...b, data: e.target.value }))} />
+                <Input
+                  type="date"
+                  value={benef.data}
+                  onChange={(e) => setBenef((b) => ({ ...b, data: e.target.value }))}
+                  disabled={bloqueiaCampoCusto}
+                />
               </Field>
 
               {benef.fornecedorOrigemId && benef.materialOrigemId && !compraOrigem && (
@@ -720,9 +744,9 @@ export function ServicosScreen() {
                       <div className="flex flex-wrap gap-3">
                         <button
                           type="button"
-                          className={usados > 0 ? "underline text-muted-foreground" : "underline"}
+                          className="underline"
                           onClick={() => iniciarEdicao(sf)}
-                          title={usados > 0 ? `Já usado em ${usados} produto(s) — não pode ser editado` : undefined}
+                          title={usados > 0 ? `Já usado em ${usados} produto(s) — apenas as categorias podem ser alteradas` : undefined}
                         >
                           Editar
                         </button>
