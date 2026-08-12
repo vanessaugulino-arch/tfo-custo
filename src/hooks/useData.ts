@@ -995,23 +995,33 @@ export interface SaldoEstoque {
   material_id: string;
   material: Tables["materiais"]["Row"];
   saldo_atual: number;
+  /** "peças" ou "m" — derivado da unidade de compra mais recente desse material (a coluna materiais.unidade_padrao não é confiável, nunca é atualizada). */
+  unidadeEstoque: "peças" | "m";
 }
 
 export function useEstoqueAtual() {
   return useQuery({
     queryKey: ["estoque"],
     queryFn: async (): Promise<SaldoEstoque[]> => {
-      const [{ data: materiais, error: eMat }, { data: saldos, error: eSaldo }] = await Promise.all([
+      const [{ data: materiais, error: eMat }, { data: saldos, error: eSaldo }, { data: compras, error: eCompras }] = await Promise.all([
         supabase.from("materiais").select("*").order("nome"),
         supabase.from("estoque_atual").select("*"),
+        supabase.from("compras_insumo").select("material_id, unidade_compra, data_compra").order("data_compra", { ascending: false }),
       ]);
       if (eMat) throw eMat;
       if (eSaldo) throw eSaldo;
+      if (eCompras) throw eCompras;
       const saldoPorMaterial = new Map((saldos ?? []).map((s) => [s.material_id, s.saldo_atual]));
+      // compras já vem ordenado da mais recente pra mais antiga — a primeira ocorrência por material é a unidade vigente.
+      const unidadeCompraPorMaterial = new Map<string, string>();
+      for (const c of compras ?? []) {
+        if (!unidadeCompraPorMaterial.has(c.material_id)) unidadeCompraPorMaterial.set(c.material_id, c.unidade_compra);
+      }
       return (materiais ?? []).map((m) => ({
         material_id: m.id,
         material: m,
         saldo_atual: saldoPorMaterial.get(m.id) ?? 0,
+        unidadeEstoque: unidadeCompraPorMaterial.get(m.id) === "peca" ? "peças" : "m",
       }));
     },
   });

@@ -82,7 +82,7 @@ export function EstoqueScreen() {
       Código: e.material.codigo ?? "",
       Material: e.material.nome,
       Cor: e.material.cor ?? "",
-      Unidade: e.material.unidade_padrao,
+      Unidade: e.unidadeEstoque,
       "Saldo atual": e.saldo_atual,
     }));
     const ws = XLSX.utils.json_to_sheet(linhas);
@@ -135,7 +135,7 @@ export function EstoqueScreen() {
               <tr key={e.material_id} className="border-b border-border/60">
                 <td className="py-2 pr-4">{labelMaterial(e.material)}</td>
                 <td className="py-2 pr-4">{e.material.codigo}</td>
-                <td className="py-2 pr-4">{e.material.unidade_padrao}</td>
+                <td className="py-2 pr-4">{e.unidadeEstoque}</td>
                 <td className={`py-2 pr-4 font-medium ${e.saldo_atual < 0 ? "text-destructive" : ""}`}>
                   {formatNumber(e.saldo_atual)}
                 </td>

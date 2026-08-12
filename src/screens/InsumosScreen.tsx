@@ -42,6 +42,12 @@ const TOUR_STEPS: TourStep[] = [
       "Metro e peso convertem para metros lineares; peça não converte (o Pack diz quantas peças por embalagem); rolo usa a metragem de cada rolo. Passe o mouse nos ícones de ajuda para ver exemplos.",
   },
   {
+    targetId: "insumos-rendimento",
+    title: "Compra por peso? Use o rendimento que o fornecedor já te dá",
+    texto:
+      "Quando você compra por peso, o fornecedor quase sempre informa quantos metros rendem 1 kg daquele tecido (ex: \"1kg rende 3 metros\"). Digite o peso comprado em kg normal e esse rendimento no campo ao lado — o sistema multiplica os dois e converte automaticamente para a metragem linear real, que é o que entra no seu estoque e no custo por metro.",
+  },
+  {
     targetId: "insumos-regime",
     title: "O regime tributário muda o custo líquido",
     texto: "Simples Nacional não gera crédito de imposto — o preço pago já é o custo real. Nos outros regimes, uma parte do imposto pago volta como crédito.",
@@ -172,7 +178,12 @@ export function InsumosScreen() {
       );
     }
     if (unidadeCompra === "peso_kg") {
-      return "Peso total do lote em quilos, direto da balança — não precisa contar rolos ou embalagens.";
+      return (
+        <>
+          Peso total do lote em quilos, direto da balança — <strong>não</strong> em metros. É o rendimento (campo
+          abaixo) que converte esse peso para a metragem linear real que entra no estoque.
+        </>
+      );
     }
     return "Metragem linear total já comprada deste lote.";
   }
@@ -356,7 +367,8 @@ export function InsumosScreen() {
                 <InfoTooltip>
                   <strong>Metro:</strong> tecido plano cortado do rolo.
                   <br />
-                  <strong>Peso:</strong> malhas — o rendimento em metros por kg depende da gramatura.
+                  <strong>Peso:</strong> malhas — você pesa e informa o rendimento que o fornecedor já te passa (quantos
+                  metros rendem 1 kg); o sistema converte pra metro linear sozinho.
                   <br />
                   <strong>Rolo:</strong> rolo/peça fechada com metragem linear conhecida.
                   <br />
@@ -389,11 +401,12 @@ export function InsumosScreen() {
 
           {precisaRendimento && (
             <Field
-              label={unidadeCompra === "peso_kg" ? "Rendimento (metros por kg)" : "Metros lineares por rolo"}
+              label={unidadeCompra === "peso_kg" ? "Rendimento (quantos metros rende 1 kg)" : "Metros lineares por rolo"}
+              data-tour="insumos-rendimento"
               hint={
                 <InfoTooltip>
                   {unidadeCompra === "peso_kg"
-                    ? "Quantos metros lineares equivalem a 1 kg deste lote. Depende da gramatura e espessura do tecido — pode variar por compra."
+                    ? "É o número que o próprio fornecedor costuma te passar — ex: \"1 kg rende 3 metros\". Depende da gramatura e espessura do tecido, então pode mudar de lote pra lote; some ao 'Quantidade comprada' pra virar a metragem real que entra no estoque."
                     : "Quantos metros lineares tem cada rolo fechado deste lote."}
                 </InfoTooltip>
               }

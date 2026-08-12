@@ -65,7 +65,7 @@ export function RelatoriosScreen() {
       .filter((e) => e.saldo_atual > 0)
       .map((e) => {
         const ultima = ultimaMovPorMaterial.get(e.material_id);
-        return { material: e.material, saldo: e.saldo_atual, ultima, dias: ultima ? diasDesde(ultima) : null };
+        return { material: e.material, saldo: e.saldo_atual, unidade: e.unidadeEstoque, ultima, dias: ultima ? diasDesde(ultima) : null };
       })
       .sort((a, b) => (b.dias ?? 999999) - (a.dias ?? 999999));
   }, [movimentos, estoqueAtual]);
@@ -90,7 +90,7 @@ export function RelatoriosScreen() {
           consumoMedioMensal = info.total / meses;
         }
         const mesesRestantes = consumoMedioMensal && consumoMedioMensal > 0 ? e.saldo_atual / consumoMedioMensal : null;
-        return { material: e.material, saldo: e.saldo_atual, consumoMedioMensal, mesesRestantes };
+        return { material: e.material, saldo: e.saldo_atual, unidade: e.unidadeEstoque, consumoMedioMensal, mesesRestantes };
       })
       .filter((r) => r.saldo > 0 || r.consumoMedioMensal)
       .sort((a, b) => (a.mesesRestantes ?? Infinity) - (b.mesesRestantes ?? Infinity));
@@ -241,7 +241,9 @@ export function RelatoriosScreen() {
             {estoqueParado.slice(0, 15).map((r) => (
               <tr key={r.material.id} className="border-b border-border/60">
                 <td className="py-2 pr-4">{labelMaterial(r.material)}</td>
-                <td className="py-2 pr-4">{formatNumber(r.saldo)}</td>
+                <td className="py-2 pr-4">
+                  {formatNumber(r.saldo)} {r.unidade}
+                </td>
                 <td className="py-2 pr-4">{r.ultima ? new Date(r.ultima).toLocaleDateString("pt-BR") : "sem registro"}</td>
                 <td className="py-2 pr-4">
                   {r.dias == null ? (
@@ -289,7 +291,9 @@ export function RelatoriosScreen() {
             {volumeConsumo.slice(0, 15).map((r) => (
               <tr key={r.material.id} className="border-b border-border/60">
                 <td className="py-2 pr-4">{labelMaterial(r.material)}</td>
-                <td className={`py-2 pr-4 ${r.saldo < 0 ? "text-destructive font-medium" : ""}`}>{formatNumber(r.saldo)}</td>
+                <td className={`py-2 pr-4 ${r.saldo < 0 ? "text-destructive font-medium" : ""}`}>
+                  {formatNumber(r.saldo)} {r.unidade}
+                </td>
                 <td className="py-2 pr-4">{r.consumoMedioMensal != null ? formatNumber(r.consumoMedioMensal) : "sem dados suficientes"}</td>
                 <td className="py-2 pr-4">
                   {r.saldo < 0 ? (

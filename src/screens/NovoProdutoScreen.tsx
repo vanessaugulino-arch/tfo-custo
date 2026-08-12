@@ -638,11 +638,12 @@ export function NovoProdutoScreen() {
             />
           </Field>
           <Field
-            label="Consumo por peça"
+            label={`Consumo por peça${compraVigente?.unidade_compra === "peca" ? " (peças)" : " (m)"}`}
             hint={
               <InfoTooltip>
-                Sempre em metros lineares, independente de como o insumo foi comprado (metro, peso ou peça/rolo) — o
-                sistema já converteu o preço para R$/metro na tela de Insumos.
+                {compraVigente?.unidade_compra === "peca"
+                  ? "Quantas peças desse aviamento (zíper, botão...) cada unidade do produto usa — o sistema já sabe o preço por peça, calculado na tela de Insumos."
+                  : "Em metros lineares, independente de como o insumo foi comprado (metro, peso ou rolo) — o sistema já converteu o preço para R$/metro na tela de Insumos."}
               </InfoTooltip>
             }
           >
