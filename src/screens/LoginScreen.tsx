@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Button, Field, Input } from "@/components/ui";
 
 export function LoginScreen() {
@@ -34,8 +35,10 @@ export function LoginScreen() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-serif text-foreground">TFO Custos</h1>
-          <p className="text-sm text-muted-foreground mt-1">Custo de produto, do insumo ao preço.</p>
+          <div className="flex justify-center">
+            <BrandLogo size="lg" />
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">Custo de produto, do insumo ao preço.</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">

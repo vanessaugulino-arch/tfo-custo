@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePerfilNegocio } from "@/hooks/useData";
+import { BrandLogo } from "./BrandLogo";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 
 const NAV_ITEMS = [
@@ -25,8 +26,8 @@ export function Layout() {
     <div className="min-h-screen flex">
       <aside className="w-60 shrink-0 bg-sidebar text-sidebar-foreground p-4 flex flex-col">
         <div className="mb-6">
-          <div className="text-lg font-serif">TFO Custos</div>
-          <div className="text-xs text-sidebar-foreground/60">Custo de produto</div>
+          <BrandLogo size="sm" />
+          <div className="text-xs text-sidebar-foreground/60 mt-1">Custo de produto</div>
         </div>
         <nav className="flex flex-col gap-1 flex-1">
           {navItems.map((item) => (

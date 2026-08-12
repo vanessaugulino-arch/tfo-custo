@@ -48,7 +48,7 @@ export function InicioScreen() {
     <div>
       <PageTitle
         title={`Olá${primeiroNome ? `, ${primeiroNome}` : ""}${perfil?.nome_marca ? ` — ${perfil.nome_marca}` : ""}.`}
-        subtitle="Este é o fluxo do TFO Custos, do insumo comprado até o custo final da peça. Volte aqui sempre que quiser lembrar o que cada item do menu faz."
+        subtitle="Este é o fluxo do Fashion Skills, do insumo comprado até o custo final da peça. Volte aqui sempre que quiser lembrar o que cada item do menu faz."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

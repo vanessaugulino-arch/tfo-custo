@@ -355,7 +355,7 @@ export function OnboardingWizard({ modo = "onboarding" }: OnboardingWizardProps)
         podeContinuar={!!rascunho.faturamento_faixa && !!rascunho.estagio && !!rascunho.modelo_producao}
         aoVoltar={aoVoltar}
         aoContinuar={() => salvarEAvancar(rascunho, "como_funciona")}
-        proximoTexto="Próximo: como o TFO Custos funciona"
+        proximoTexto="Próximo: como o Fashion Skills funciona"
         carregando={salvar.isPending}
       >
         <div>
@@ -386,7 +386,7 @@ export function OnboardingWizard({ modo = "onboarding" }: OnboardingWizardProps)
         etapaAtual={etapaAtual}
         totalEtapas={totalEtapas}
         modo={modo}
-        tituloDestaque="Como o TFO Custos funciona."
+        tituloDestaque="Como o Fashion Skills funciona."
         descricaoDireita="Quatro passos entre o insumo comprado e o custo final da peça."
         podeContinuar
         aoVoltar={aoVoltar}

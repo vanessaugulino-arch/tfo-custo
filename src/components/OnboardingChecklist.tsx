@@ -30,7 +30,7 @@ export function OnboardingChecklist() {
     <div className="mb-6 rounded-xl border border-border bg-card p-5">
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h2 className="font-serif text-lg text-foreground">Bem-vinda ao TFO Custos</h2>
+          <h2 className="font-serif text-lg text-foreground">Bem-vinda ao Fashion Skills</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             {concluidos} de {passos.length} passos concluídos — siga a ordem para chegar ao custo do primeiro produto.
           </p>
