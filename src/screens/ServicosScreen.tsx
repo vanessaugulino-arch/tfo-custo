@@ -7,6 +7,7 @@ import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
 import { Badge, Button, Card, Field, Input, PageTitle, Select } from "@/components/ui";
 import {
   useAplicarBeneficiamento,
+  useAtualizarValorEngajamento,
   useCategorias,
   useColecoes,
   useCreateCategoria,
@@ -16,12 +17,14 @@ import {
   useCreateServicoFornecedor,
   useDeleteServicoFornecedor,
   useFornecedores,
+  useGetOrCreateServicoEngajamento,
   useMateriais,
   useMateriaisPorFornecedor,
   useServicoFornecedorUsoCount,
   useServicos,
   useServicosFornecedor,
   useTodosBeneficiamentos,
+  useTodosEngajamentos,
   useUltimaCompraPorFornecedorMaterial,
   useUpdateBeneficiamento,
   useUpdateMaterial,
@@ -34,24 +37,26 @@ import { MODELO_SERVICOS } from "@/lib/importFields";
 import { formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_EXPLICACAO, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
 
 const MODELOS = Object.entries(MODELO_PRECIFICACAO_LABELS) as [ModeloPrecificacaoServico, string][];
-const MODELOS_VALIDOS = new Set(["colecao", "peca_desenvolvida", "peca_produzida", "tempo"]);
+const MODELOS_VALIDOS = new Set(["peca_produzida", "tempo"]);
+const MODELOS_POOLED = new Set<ModeloPrecificacaoServico>(["colecao", "peca_desenvolvida"]);
 
 const TOUR_STEPS: TourStep[] = [
+  {
+    targetId: "servicos-colecao",
+    title: "Todo serviço pertence a uma coleção",
+    texto:
+      "Aqui você registra um contrato específico: este fornecedor, para esta coleção, por este valor. Se o mesmo fornecedor cobra valores diferentes para coleções ou peças diferentes (ex: R$350 pelo molde da camisa, R$400 pelo molde do vestido), cadastre um serviço separado para cada um — não reaproveite o mesmo cadastro.",
+  },
   {
     targetId: "servicos-modelo",
     title: "Escolha o modelo de precificação com cuidado",
     texto:
-      "É a decisão mais importante desta tela: 'por coleção' e 'por peça desenvolvida' dividem um valor combinado entre várias peças; 'por peça produzida' cobra o valor cheio em cada peça; 'por tempo' multiplica minutos pelo custo por minuto; 'metro corrido' cobra por metro linear. Assim que você escolher qualquer um desses modelos, o sistema pergunta se o serviço é um beneficiamento (transforma uma matéria-prima sua em outra) — se for, os campos de origem, material resultante e custo aparecem logo abaixo.",
-  },
-  {
-    targetId: "servicos-colecao",
-    title: "Serviços 'por coleção' ficam presos a uma coleção",
-    texto: "Ao escolher esse modelo, você define de uma vez qual coleção ele atende — não dá para reaproveitar em outra coleção depois.",
+      "'Por coleção' e 'por peça desenvolvida' dividem um valor combinado (que você já informa aqui) entre as peças que usarem este serviço; 'por peça produzida' e 'por tempo' têm o valor lançado depois, na tela de produto, pois dependem da peça; 'metro corrido' cobra por metro linear. Assim que você escolher qualquer modelo, o sistema pergunta se o serviço é um beneficiamento (transforma uma matéria-prima sua em outra) — se for, os campos de origem, material resultante e custo aparecem logo abaixo.",
   },
   {
     targetId: "servicos-tabela",
     title: "Serviços já cadastrados",
-    texto: "Você sempre pode editar as categorias atendidas, mesmo depois de usado em produtos. Fornecedor, tipo, modelo de precificação e os dados de beneficiamento só ficam travados após o primeiro uso, para não desalinhar custos já calculados — nesse caso, cadastre um novo serviço se precisar de um valor diferente.",
+    texto: "Você sempre pode editar as categorias atendidas, mesmo depois de usado em produtos. Fornecedor, tipo, modelo, coleção, valor combinado e os dados de beneficiamento só ficam travados após o primeiro uso, para não desalinhar custos já calculados — nesse caso, cadastre um novo serviço se precisar de um valor diferente.",
   },
 ];
 
@@ -63,6 +68,7 @@ interface FormServico {
   modelo: ModeloPrecificacaoServico;
   colecaoId: string | null;
   custoPorMinuto: string;
+  valorTotal: string;
   beneficiamento: boolean;
 }
 
@@ -74,6 +80,7 @@ const FORM_VAZIO: FormServico = {
   modelo: "peca_desenvolvida",
   colecaoId: null,
   custoPorMinuto: "",
+  valorTotal: "",
   beneficiamento: false,
 };
 
@@ -106,6 +113,7 @@ export function ServicosScreen() {
   const { data: colecoes = [] } = useColecoes();
   const { data: servicosFornecedor = [] } = useServicosFornecedor();
   const { data: beneficiamentos = [] } = useTodosBeneficiamentos();
+  const { data: engajamentos = [] } = useTodosEngajamentos();
   const { data: usoMap = new Map<string, number>() } = useServicoFornecedorUsoCount();
   const { data: materiais = [] } = useMateriais();
   const createFornecedor = useCreateFornecedor();
@@ -118,9 +126,12 @@ export function ServicosScreen() {
   const deleteServicoFornecedor = useDeleteServicoFornecedor();
   const aplicarBeneficiamento = useAplicarBeneficiamento();
   const updateBeneficiamento = useUpdateBeneficiamento();
+  const getOrCreateEngajamento = useGetOrCreateServicoEngajamento();
+  const atualizarValorEngajamento = useAtualizarValorEngajamento();
   const [importAberto, setImportAberto] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editandoBeneficiamentoId, setEditandoBeneficiamentoId] = useState<string | null>(null);
+  const [editandoEngajamentoId, setEditandoEngajamentoId] = useState<string | null>(null);
   const tour = useTourAutoShow("servicos");
 
   const [form, setForm] = useState<FormServico>(FORM_VAZIO);
@@ -129,8 +140,13 @@ export function ServicosScreen() {
   const [confirmandoBeneficiamento, setConfirmandoBeneficiamento] = useState(false);
 
   const isBeneficiamento = form.beneficiamento;
+  const isPooled = MODELOS_POOLED.has(form.modelo);
   const usosDoServicoEmEdicao = editandoId ? usoMap.get(editandoId) ?? 0 : 0;
   const bloqueiaCampoCusto = usosDoServicoEmEdicao > 0;
+
+  function engajamentoDoServico(servicoFornecedorId: string) {
+    return engajamentos.find((e) => e.servico_fornecedor_id === servicoFornecedorId) ?? null;
+  }
 
   const { data: materiaisOrigemDisponiveis = [] } = useMateriaisPorFornecedor(benef.fornecedorOrigemId);
   const { data: compraOrigem } = useUltimaCompraPorFornecedorMaterial(benef.fornecedorOrigemId, benef.materialOrigemId);
@@ -162,11 +178,10 @@ export function ServicosScreen() {
         const modeloRow = row.modelo_precificacao?.trim().toLowerCase();
         if (!MODELOS_VALIDOS.has(modeloRow))
           throw new Error(
-            "modelo de precificação inválido (use colecao, peca_desenvolvida, peca_produzida ou tempo — 'metro_corrido' não pode ser importado em lote)",
+            "modelo de precificação inválido para importação em lote (use peca_produzida ou tempo — 'colecao', 'peca_desenvolvida' e 'metro_corrido' exigem escolher a coleção e/ou o valor combinado manualmente)",
           );
         const custoPorMinuto = modeloRow === "tempo" ? parseNumeroPtBr(row.custo_por_minuto) : null;
         if (modeloRow === "tempo" && !(Number(custoPorMinuto) > 0)) throw new Error("custo por minuto obrigatório para o modelo 'tempo'");
-        if (modeloRow === "colecao") throw new Error("modelo 'colecao' não pode ser importado em lote — cadastre manualmente para escolher a coleção");
 
         const fornecedorId = await findOrCreateFornecedor(row.fornecedor);
         const servicoId = await findOrCreateServico(row.servico);
@@ -198,6 +213,7 @@ export function ServicosScreen() {
 
   function iniciarEdicao(sf: ServicoFornecedorCompleto) {
     setEditandoId(sf.id);
+    const eng = engajamentoDoServico(sf.id);
     setForm({
       fornecedorId: sf.fornecedor_id,
       servicoId: sf.servico_id,
@@ -206,8 +222,10 @@ export function ServicosScreen() {
       modelo: sf.modelo_precificacao as ModeloPrecificacaoServico,
       colecaoId: sf.colecao_id,
       custoPorMinuto: sf.custo_por_minuto != null ? String(sf.custo_por_minuto) : "",
+      valorTotal: eng ? String(eng.valor_total) : "",
       beneficiamento: sf.beneficiamento,
     });
+    setEditandoEngajamentoId(eng?.id ?? null);
     const b = beneficiamentoDoServico(sf.id);
     if (b) {
       setEditandoBeneficiamentoId(b.id);
@@ -231,6 +249,7 @@ export function ServicosScreen() {
   function cancelarEdicao() {
     setEditandoId(null);
     setEditandoBeneficiamentoId(null);
+    setEditandoEngajamentoId(null);
     setForm(FORM_VAZIO);
     setBenef(beneficiamentoVazio());
     setErro(null);
@@ -257,8 +276,12 @@ export function ServicosScreen() {
       setErro("Informe o custo por minuto de produção.");
       return;
     }
-    if (form.modelo === "colecao" && !form.colecaoId) {
-      setErro("Selecione a coleção para este serviço 'por coleção'.");
+    if (!form.colecaoId) {
+      setErro("Selecione para qual coleção é este serviço.");
+      return;
+    }
+    if (isPooled && !(Number(form.valorTotal) > 0)) {
+      setErro("Informe o valor total combinado com o fornecedor.");
       return;
     }
     if (isBeneficiamento) {
@@ -289,7 +312,7 @@ export function ServicosScreen() {
       servicoId: form.servicoId,
       modeloPrecificacao: form.modelo,
       custoPorMinuto: form.modelo === "tempo" ? Number(form.custoPorMinuto) : null,
-      colecaoId: form.modelo === "colecao" ? form.colecaoId : null,
+      colecaoId: form.colecaoId,
       beneficiamento: isBeneficiamento,
       todasCategorias: form.todasCategorias,
       categoriaIds: form.todasCategorias ? categorias.map((c) => c.id) : form.categoriaIds,
@@ -304,6 +327,21 @@ export function ServicosScreen() {
 
     if (editandoId) {
       await updateServicoFornecedor.mutateAsync({ id: editandoId, ...payload });
+      if (isPooled && !bloqueiaCampoCusto) {
+        if (editandoEngajamentoId) {
+          await atualizarValorEngajamento.mutateAsync({
+            id: editandoEngajamentoId,
+            valorTotal: Number(form.valorTotal),
+            colecaoId: form.colecaoId!,
+          });
+        } else {
+          await getOrCreateEngajamento.mutateAsync({
+            servicoFornecedorId: editandoId,
+            colecaoId: form.colecaoId!,
+            valorTotalSeNovo: Number(form.valorTotal),
+          });
+        }
+      }
       if (isBeneficiamento && compraOrigem) {
         if (editandoBeneficiamentoId) {
           await updateBeneficiamento.mutateAsync({
@@ -336,6 +374,13 @@ export function ServicosScreen() {
     }
 
     const criado = await createServicoFornecedor.mutateAsync(payload);
+    if (isPooled) {
+      await getOrCreateEngajamento.mutateAsync({
+        servicoFornecedorId: criado.id,
+        colecaoId: form.colecaoId!,
+        valorTotalSeNovo: Number(form.valorTotal),
+      });
+    }
     if (isBeneficiamento && compraOrigem) {
       await aplicarBeneficiamento.mutateAsync({
         servicoFornecedorId: criado.id,
@@ -407,7 +452,7 @@ export function ServicosScreen() {
         {editandoId && (
           <div className="mb-4 flex items-center justify-between rounded-md bg-accent px-4 py-2 text-sm text-accent-foreground">
             {bloqueiaCampoCusto
-              ? `Editando serviço já usado em ${usosDoServicoEmEdicao} produto${usosDoServicoEmEdicao > 1 ? "s" : ""} — fornecedor, tipo, modelo de precificação e os dados de beneficiamento ficam travados para não alterar custos já calculados. Você pode alterar as categorias atendidas.`
+              ? `Editando serviço já usado em ${usosDoServicoEmEdicao} produto${usosDoServicoEmEdicao > 1 ? "s" : ""} — fornecedor, tipo, modelo de precificação, coleção, valor combinado e os dados de beneficiamento ficam travados para não alterar custos já calculados. Você pode alterar as categorias atendidas.`
               : "Editando serviço já cadastrado."}
             <button type="button" className="underline" onClick={cancelarEdicao}>
               Cancelar edição
@@ -504,6 +549,31 @@ export function ServicosScreen() {
             </Select>
           </Field>
 
+          <Field
+            label="Coleção"
+            data-tour="servicos-colecao"
+            hint={
+              <InfoTooltip>
+                Todo serviço pertence a uma coleção — é o que identifica este contrato específico. Se o mesmo
+                fornecedor cobra valores diferentes para peças ou coleções diferentes, cadastre um serviço separado
+                para cada um, em vez de reaproveitar este.
+              </InfoTooltip>
+            }
+          >
+            <Select
+              value={form.colecaoId ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, colecaoId: e.target.value || null }))}
+              disabled={bloqueiaCampoCusto}
+            >
+              <option value="">Selecionar coleção...</option>
+              {colecoes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
           {form.modelo === "tempo" && (
             <Field label="Custo por minuto de produção (R$)">
               <Input
@@ -516,36 +586,32 @@ export function ServicosScreen() {
               />
             </Field>
           )}
-          {form.modelo === "colecao" && (
+          {isPooled && (
             <Field
-              label="Coleção"
-              data-tour="servicos-colecao"
+              label="Valor total combinado (R$)"
               hint={
                 <InfoTooltip>
-                  Esse serviço fica preso a esta coleção — ao lançar produtos, o valor combinado será dividido entre
-                  todas as peças produzidas nela.
+                  O valor combinado com o fornecedor para este contrato. Será dividido entre as peças que usarem este
+                  serviço específico (ou entre todas as peças da coleção, no caso de "por coleção") quando a coleção
+                  for "fechada".
                 </InfoTooltip>
               }
             >
-              <Select
-                value={form.colecaoId ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, colecaoId: e.target.value || null }))}
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                value={form.valorTotal}
+                onChange={(e) => setForm((f) => ({ ...f, valorTotal: e.target.value }))}
+                placeholder="ex: 350,00"
                 disabled={bloqueiaCampoCusto}
-              >
-                <option value="">Selecionar coleção...</option>
-                {colecoes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </Select>
+              />
             </Field>
           )}
-          {(form.modelo === "peca_desenvolvida" || form.modelo === "peca_produzida") && (
+          {form.modelo === "peca_produzida" && (
             <div className="flex items-end text-sm text-muted-foreground">
-              {form.modelo === "peca_desenvolvida"
-                ? "O valor combinado com o fornecedor é lançado por coleção na tela de produto e dividido entre as peças que usarem este serviço."
-                : "O preço é o último valor já pago a este fornecedor, por categoria — lançado na tela de produto, sem diluição."}
+              O preço é o último valor já pago a este fornecedor, por categoria — lançado na tela de produto, sem
+              diluição.
             </div>
           )}
 

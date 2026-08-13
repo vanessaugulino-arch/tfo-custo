@@ -16,7 +16,6 @@ import {
   useEstoqueAtual,
   useFornecedores,
   useFornecedoresPorMaterial,
-  useGetOrCreateServicoEngajamento,
   useMateriais,
   usePerfilNegocio,
   useServicoEngajamento,
@@ -33,15 +32,15 @@ import { formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_LABELS } fr
 const TOUR_STEPS: TourStep[] = [
   {
     targetId: "produto-colecao",
-    title: "A coleção define como o custo compartilhado é dividido",
+    title: "A coleção define quais serviços aparecem aqui",
     texto:
-      "Se você usar serviços 'por coleção' ou 'por peça desenvolvida', a coleção deste produto é o que define o grupo de peças que vai dividir o custo — escolha com atenção.",
+      "Só serviços cadastrados para a mesma coleção deste produto podem ser adicionados — escolha a coleção com atenção antes de ir para os serviços.",
   },
   {
     targetId: "produto-servicos",
     title: "Serviços compartilhados aparecem como 'provisório'",
     texto:
-      "Ao adicionar um serviço 'por coleção' ou 'por peça desenvolvida', o custo mostrado é uma estimativa que muda conforme mais peças usam o mesmo serviço. Ele só fica definitivo quando você 'fecha' a coleção.",
+      "Serviços 'por coleção' ou 'por peça desenvolvida' já vêm com o valor combinado definido lá no cadastro em Serviços — aqui você só escolhe qual usar. O custo por peça mostrado é uma estimativa que muda conforme mais peças usam o mesmo serviço, e só fica definitivo quando você 'fecha' a coleção.",
   },
   {
     targetId: "produto-producao-interna",
@@ -84,7 +83,6 @@ export function NovoProdutoScreen() {
   const createColecao = useCreateColecao();
   const createCategoria = useCreateCategoria();
   const createProduto = useCreateProdutoCompleto();
-  const getOrCreateEngajamento = useGetOrCreateServicoEngajamento();
   const tour = useTourAutoShow("novo_produto");
 
   const temProducaoInterna = perfil?.modelo_producao === "propria" || perfil?.modelo_producao === "misto";
@@ -120,12 +118,12 @@ export function NovoProdutoScreen() {
   const [draftServicoFornecedorId, setDraftServicoFornecedorId] = useState<string | null>(null);
   const [draftPrecoUnitario, setDraftPrecoUnitario] = useState("");
   const [draftTempoMinutos, setDraftTempoMinutos] = useState("");
-  const [draftValorTotalEngajamento, setDraftValorTotalEngajamento] = useState("");
 
   const draftServico = servicosFornecedor.find((sf) => sf.id === draftServicoFornecedorId) ?? null;
   const draftPooled = draftServico?.modelo_precificacao === "colecao" || draftServico?.modelo_precificacao === "peca_desenvolvida";
-  // Para "colecao" a coleção já vem travada no cadastro do serviço; para "peca_desenvolvida" é a coleção deste produto.
-  const draftColecaoEfetivaId = draftServico?.modelo_precificacao === "colecao" ? draftServico.colecao_id : colecaoId;
+  // Todo serviço já vem com a coleção travada desde o cadastro em Serviços.
+  const draftColecaoEfetivaId = draftServico?.colecao_id ?? null;
+  const draftColecaoConflita = !!draftServico && draftServico.colecao_id !== null && draftServico.colecao_id !== colecaoId;
   const { data: precoSugerido } = useUltimoPrecoServico(
     draftServicoFornecedorId,
     draftServico?.modelo_precificacao === "peca_produzida" ? categoriaId : null,
@@ -207,30 +205,20 @@ export function NovoProdutoScreen() {
     setErro(null);
 
     if (draftPooled) {
-      if (!draftColecaoEfetivaId) {
-        setErro(
-          modelo === "colecao"
-            ? "Este serviço está preso a outra coleção — escolha essa coleção para o produto, ou cadastre outro serviço."
-            : "Selecione a coleção do produto antes de adicionar um serviço 'por peça desenvolvida'.",
-        );
+      if (draftColecaoConflita) {
+        setErro(`Este serviço está preso à coleção "${draftServico.colecao?.nome}" — não pode ser usado num produto de outra coleção.`);
         return;
       }
-      let engajamentoId = engajamentoExistente?.id ?? null;
-      if (!engajamentoId) {
-        const valorTotal = Number(draftValorTotalEngajamento) || 0;
-        if (valorTotal <= 0) {
-          setErro("Informe o valor total combinado com o fornecedor para esta coleção.");
-          return;
-        }
-        const engajamento = await getOrCreateEngajamento.mutateAsync({
-          servicoFornecedorId: draftServico.id,
-          colecaoId: draftColecaoEfetivaId,
-          valorTotalSeNovo: valorTotal,
-        });
-        engajamentoId = engajamento.id;
+      if (!draftColecaoEfetivaId) {
+        setErro("Selecione a coleção do produto acima antes de adicionar este serviço.");
+        return;
+      }
+      if (!engajamentoExistente) {
+        setErro("Este serviço ainda não tem um valor combinado definido — vá em Serviços e edite o cadastro para informar o valor.");
+        return;
       }
       const estimativa = await calcularEstimativaCustoPecaEngajamento(
-        engajamentoId,
+        engajamentoExistente.id,
         draftColecaoEfetivaId,
         modelo,
         quantidadeProduzidaNum,
@@ -242,7 +230,7 @@ export function NovoProdutoScreen() {
         servicoFornecedorId: draftServico.id,
         categoriaProdutoId: categoriaId,
         modeloPrecificacao: modelo,
-        servicoEngajamentoId: engajamentoId,
+        servicoEngajamentoId: engajamentoExistente.id,
         precoUnitario: null,
         tempoMinutos: null,
         custoPorMinutoAplicado: null,
@@ -251,7 +239,6 @@ export function NovoProdutoScreen() {
       };
       setServicosLinhas((prev) => [...prev, linha]);
       setDraftServicoFornecedorId(null);
-      setDraftValorTotalEngajamento("");
       return;
     }
 
@@ -586,7 +573,6 @@ export function NovoProdutoScreen() {
                 setDraftServicoFornecedorId(id);
                 setDraftPrecoUnitario("");
                 setDraftTempoMinutos("");
-                setDraftValorTotalEngajamento("");
               }}
               placeholder="Selecionar serviço já cadastrado..."
             />
@@ -609,29 +595,9 @@ export function NovoProdutoScreen() {
               />
             </Field>
           )}
-          {draftPooled && !engajamentoExistente && (
-            <Field
-              label="Valor total combinado (R$)"
-              hint={
-                <InfoTooltip>
-                  Ainda não existe um valor combinado deste serviço para esta coleção — informe o valor total combinado
-                  com o fornecedor. Ele será dividido pelas peças da coleção quando ela for "fechada".
-                </InfoTooltip>
-              }
-            >
-              <Input
-                type="number"
-                min="0"
-                step="any"
-                value={draftValorTotalEngajamento}
-                onChange={(e) => setDraftValorTotalEngajamento(e.target.value)}
-                placeholder="ex: 500,00"
-              />
-            </Field>
-          )}
           {draftPooled && engajamentoExistente && (
             <div className="text-sm text-muted-foreground">
-              Valor combinado já registrado: <strong>{formatBRL(engajamentoExistente.valor_total)}</strong>
+              Valor combinado: <strong>{formatBRL(engajamentoExistente.valor_total)}</strong>
             </div>
           )}
 
@@ -648,15 +614,9 @@ export function NovoProdutoScreen() {
                 Usar último preço: {formatBRL(precoSugerido.preco_unitario ?? precoSugerido.valor_calculado)}
               </button>
             )}
-            {draftPooled && (
+            {draftPooled && estimativaEngajamentoExistente !== null && (
               <span>
-                Estimativa por peça:{" "}
-                {estimativaEngajamentoExistente !== null
-                  ? formatBRL(estimativaEngajamentoExistente)
-                  : draftValorTotalEngajamento && quantidadeProduzidaNum > 0
-                    ? formatBRL(Number(draftValorTotalEngajamento) / quantidadeProduzidaNum)
-                    : "—"}{" "}
-                <span className="italic">(provisório)</span>
+                Estimativa por peça: {formatBRL(estimativaEngajamentoExistente)} <span className="italic">(provisório)</span>
               </span>
             )}
           </div>
@@ -665,25 +625,26 @@ export function NovoProdutoScreen() {
             type="button"
             variant="secondary"
             onClick={addServicoLinha}
-            disabled={
-              !draftServico ||
-              (draftServico.modelo_precificacao === "colecao" && draftServico.colecao_id !== colecaoId) ||
-              (draftServico.modelo_precificacao === "peca_desenvolvida" && !colecaoId) ||
-              (draftPooled && !engajamentoExistente && !(Number(draftValorTotalEngajamento) > 0))
-            }
+            disabled={!draftServico || draftColecaoConflita || (draftPooled && (!draftColecaoEfetivaId || !engajamentoExistente))}
           >
             Adicionar
           </Button>
         </div>
-        {draftServico?.modelo_precificacao === "colecao" && colecaoId && draftServico.colecao_id !== colecaoId && (
+        {draftServico && draftColecaoConflita && (
           <div className="mb-4 text-sm text-destructive">
             Este serviço está preso à coleção "{draftServico.colecao?.nome}" — não pode ser usado num produto de outra
             coleção.
           </div>
         )}
-        {draftServico?.modelo_precificacao === "peca_desenvolvida" && !colecaoId && (
+        {draftPooled && !draftColecaoConflita && !colecaoId && (
           <div className="mb-4 text-sm text-destructive">
             Selecione a coleção do produto acima antes de adicionar este serviço.
+          </div>
+        )}
+        {draftPooled && !draftColecaoConflita && colecaoId && !engajamentoExistente && (
+          <div className="mb-4 text-sm text-destructive">
+            Este serviço ainda não tem um valor combinado definido — edite o cadastro dele na tela de Serviços para
+            informar o valor.
           </div>
         )}
 

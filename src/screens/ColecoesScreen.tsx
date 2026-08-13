@@ -56,7 +56,11 @@ export function ColecoesScreen() {
       `Fechar "${colecaoSelecionada.nome}"? Isso trava o custo definitivo de todos os produtos desta coleção, dividindo os serviços "por coleção" e "por peça desenvolvida" entre as peças produzidas. Você pode continuar adicionando produtos depois, mas os custos já fechados só mudam se você fechar de novo.`,
     );
     if (!ok) return;
-    await fecharColecao.mutateAsync(colecaoSelecionada.id);
+    try {
+      await fecharColecao.mutateAsync(colecaoSelecionada.id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Não foi possível fechar esta coleção.");
+    }
   }
 
   return (

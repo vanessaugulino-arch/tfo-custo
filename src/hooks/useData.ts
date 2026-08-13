@@ -445,21 +445,38 @@ export function useGetOrCreateServicoEngajamento() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_engajamento"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["servico_engajamento"] });
+      qc.invalidateQueries({ queryKey: ["servico_engajamento_todos"] });
+    },
+  });
+}
+
+export function useTodosEngajamentos() {
+  return useQuery({
+    queryKey: ["servico_engajamento_todos"],
+    queryFn: async (): Promise<ServicoEngajamento[]> => {
+      const { data, error } = await supabase.from("servico_engajamento").select("*");
+      if (error) throw error;
+      return data;
+    },
   });
 }
 
 export function useAtualizarValorEngajamento() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; valorTotal: number }) => {
+    mutationFn: async (input: { id: string; valorTotal: number; colecaoId: string }) => {
       const { error } = await supabase
         .from("servico_engajamento")
-        .update({ valor_total: input.valorTotal })
+        .update({ valor_total: input.valorTotal, colecao_id: input.colecaoId })
         .eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["servico_engajamento"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["servico_engajamento"] });
+      qc.invalidateQueries({ queryKey: ["servico_engajamento_todos"] });
+    },
   });
 }
 

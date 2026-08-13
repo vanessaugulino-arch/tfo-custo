@@ -39,10 +39,10 @@ export const MODELO_SERVICOS: ModeloImport = {
     { id: "fornecedor", label: "Fornecedor", tipo: "texto", obrigatorio: true, keywords: ["fornecedor", "supplier"], explicacao: "Nome do fornecedor do serviço. Se não existir, é criado automaticamente." },
     { id: "servico", label: "Tipo de serviço", tipo: "texto", obrigatorio: true, keywords: ["servico", "serviço", "tipo"], explicacao: "Ex: Modelagem, Corte, Costura. Se não existir, é criado automaticamente." },
     { id: "categorias", label: "Categorias atendidas", tipo: "texto", obrigatorio: false, keywords: ["categoria", "categorias"], explicacao: "Uma ou mais categorias separadas por vírgula (ex: Camisa, Calça). Categorias novas são criadas automaticamente." },
-    { id: "modelo_precificacao", label: "Modelo de precificação", tipo: "texto", obrigatorio: true, keywords: ["modelo", "precificação", "precificacao"], explicacao: "peca_desenvolvida, peca_produzida ou tempo. Os modelos 'colecao' e 'metro_corrido' precisam ser cadastrados manualmente." },
+    { id: "modelo_precificacao", label: "Modelo de precificação", tipo: "texto", obrigatorio: true, keywords: ["modelo", "precificação", "precificacao"], explicacao: "peca_produzida ou tempo. Os modelos 'colecao', 'peca_desenvolvida' e 'metro_corrido' precisam ser cadastrados manualmente, pois exigem escolher a coleção e/ou o valor combinado." },
     { id: "custo_por_minuto", label: "Custo por minuto (R$)", tipo: "monetario", obrigatorio: false, keywords: ["minuto", "custo por minuto"], explicacao: "Obrigatório apenas quando o modelo é 'tempo'." },
   ],
-  linhaExemplo: ["AJW", "Corte", "Camisa, Calça", "peca_desenvolvida", ""],
+  linhaExemplo: ["AJW", "Corte", "Camisa, Calça", "peca_produzida", ""],
 };
 
 export const MODELO_ESTOQUE: ModeloImport = {
