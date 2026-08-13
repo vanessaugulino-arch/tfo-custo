@@ -11,6 +11,7 @@ import {
   useCategorias,
   useColecoes,
   useCreateCategoria,
+  useCreateColecao,
   useCreateFornecedor,
   useCreateMaterial,
   useCreateServico,
@@ -119,6 +120,7 @@ export function ServicosScreen() {
   const createFornecedor = useCreateFornecedor();
   const createServico = useCreateServico();
   const createCategoria = useCreateCategoria();
+  const createColecao = useCreateColecao();
   const createMaterial = useCreateMaterial();
   const updateMaterial = useUpdateMaterial();
   const createServicoFornecedor = useCreateServicoFornecedor();
@@ -138,6 +140,9 @@ export function ServicosScreen() {
   const [benef, setBenef] = useState<FormBeneficiamento>(beneficiamentoVazio());
   const [erro, setErro] = useState<string | null>(null);
   const [confirmandoBeneficiamento, setConfirmandoBeneficiamento] = useState(false);
+  const [novaColecao, setNovaColecao] = useState(false);
+  const [colecaoNome, setColecaoNome] = useState("");
+  const [colecaoAno, setColecaoAno] = useState("");
 
   const isBeneficiamento = form.beneficiamento;
   const isPooled = MODELOS_POOLED.has(form.modelo);
@@ -166,6 +171,15 @@ export function ServicosScreen() {
     setConfirmandoBeneficiamento(false);
     setForm((f) => ({ ...f, beneficiamento: ehBeneficiamento }));
     if (!ehBeneficiamento) setBenef(beneficiamentoVazio());
+  }
+
+  async function handleCriarColecao() {
+    if (!colecaoNome.trim()) return;
+    const nova = await createColecao.mutateAsync({ nome: colecaoNome.trim(), ano: Number(colecaoAno) || null });
+    setForm((f) => ({ ...f, colecaoId: nova.id }));
+    setNovaColecao(false);
+    setColecaoNome("");
+    setColecaoAno("");
   }
 
   async function handleImportar(linhas: Record<string, string>[]): Promise<ResultadoImport> {
@@ -255,6 +269,9 @@ export function ServicosScreen() {
     setForm(FORM_VAZIO);
     setBenef(beneficiamentoVazio());
     setErro(null);
+    setNovaColecao(false);
+    setColecaoNome("");
+    setColecaoAno("");
   }
 
   async function handleExcluir(id: string) {
@@ -573,18 +590,46 @@ export function ServicosScreen() {
               </InfoTooltip>
             }
           >
-            <Select
-              value={form.colecaoId ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, colecaoId: e.target.value || null }))}
-              disabled={bloqueiaCampoCusto}
-            >
-              <option value="">Selecionar coleção...</option>
-              {colecoes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-            </Select>
+            {!novaColecao ? (
+              <div className="flex gap-2">
+                <Select
+                  value={form.colecaoId ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, colecaoId: e.target.value || null }))}
+                  disabled={bloqueiaCampoCusto}
+                  className="flex-1"
+                >
+                  <option value="">Selecionar coleção...</option>
+                  {colecoes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </Select>
+                {!bloqueiaCampoCusto && (
+                  <Button type="button" variant="secondary" onClick={() => setNovaColecao(true)}>
+                    + Nova
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+                <Input placeholder="Nome da coleção" value={colecaoNome} onChange={(e) => setColecaoNome(e.target.value)} />
+                <Input
+                  type="number"
+                  placeholder="Ano da coleção (ex: 2026)"
+                  value={colecaoAno}
+                  onChange={(e) => setColecaoAno(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button type="button" onClick={handleCriarColecao} disabled={createColecao.isPending}>
+                    Criar coleção
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setNovaColecao(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
           </Field>
 
           {form.modelo === "tempo" && (
