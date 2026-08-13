@@ -8,7 +8,7 @@ export function Card({ children, className = "", ...rest }: { children: ReactNod
   );
 }
 
-export function PageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+export function PageTitle({ title, subtitle }: { title: string; subtitle?: ReactNode }) {
   return (
     <div className="mb-6">
       <h1 className="text-2xl font-serif text-foreground">{title}</h1>
