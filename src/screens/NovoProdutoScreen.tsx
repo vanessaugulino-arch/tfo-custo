@@ -27,7 +27,7 @@ import {
   type NovaLinhaServicoProduto,
 } from "@/hooks/useData";
 import { custoInsumoPorPeca, custoMensalCargo, custoProducaoInternaPorPeca, custoServicoPorPeca, custoTotalProduto } from "@/engine/custo";
-import { formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
+import { descricaoProduto, formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -102,6 +102,8 @@ export function NovoProdutoScreen() {
   const [ajusteProducaoInternaPct, setAjusteProducaoInternaPct] = useState("0");
 
   const [nome, setNome] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [cor, setCor] = useState("");
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
   const [colecaoId, setColecaoId] = useState<string | null>(null);
   const [novaColecao, setNovaColecao] = useState(false);
@@ -110,6 +112,7 @@ export function NovoProdutoScreen() {
   const quantidadeProduzidaNum = Number(quantidadeProduzida) || 0;
   const [erro, setErro] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
+  const [produtoSalvoCodigo, setProdutoSalvoCodigo] = useState<string | null>(null);
 
   const [servicosLinhas, setServicosLinhas] = useState<ServicoLinhaUI[]>([]);
   const [insumosLinhas, setInsumosLinhas] = useState<InsumoLinhaUI[]>([]);
@@ -327,8 +330,12 @@ export function NovoProdutoScreen() {
       setErro("Adicione ao menos um serviço ou insumo.");
       return;
     }
-    await createProduto.mutateAsync({
+    const categoriaNome = categorias.find((c) => c.id === categoriaId)?.nome ?? null;
+    const criado = await createProduto.mutateAsync({
       nome: nome.trim(),
+      codigo: codigo.trim() || null,
+      cor: cor.trim() || null,
+      descricao: descricaoProduto(categoriaNome, nome.trim(), cor.trim() || null),
       categoriaProdutoId: categoriaId,
       colecaoId,
       quantidadeProduzida: quantidadeProduzidaNum,
@@ -337,6 +344,7 @@ export function NovoProdutoScreen() {
       servicos: servicosLinhas,
       insumos: insumosLinhas,
     });
+    setProdutoSalvoCodigo(criado.codigo);
     setSalvo(true);
   }
 
@@ -344,6 +352,11 @@ export function NovoProdutoScreen() {
     return (
       <Card className="max-w-md">
         <h2 className="text-lg font-semibold mb-2">Produto salvo!</h2>
+        {produtoSalvoCodigo && (
+          <p className="text-sm text-muted-foreground mb-2">
+            Código: <strong>{produtoSalvoCodigo}</strong>
+          </p>
+        )}
         <p className="text-sm text-muted-foreground mb-4">
           {servicosLinhas.some((l) => l.provisorio)
             ? "O custo foi salvo como provisório porque este produto usa serviço(s) por coleção ou peça desenvolvida — o valor definitivo só é travado quando você 'fechar' a coleção, na tela de Coleções."
@@ -383,6 +396,23 @@ export function NovoProdutoScreen() {
               onCreate={async (nome) => (await createCategoria.mutateAsync(nome)).id}
               placeholder="Selecionar ou criar categoria..."
             />
+          </Field>
+          <Field
+            label="Código"
+            hint={
+              <InfoTooltip>
+                Opcional. Deixe em branco para o sistema gerar um código automático (ex: PRD-0001), ou digite o código
+                que você já usa no seu ERP/planilha.
+              </InfoTooltip>
+            }
+          >
+            <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Gerado automaticamente" />
+          </Field>
+          <Field
+            label="Cor/Característica"
+            hint={<InfoTooltip>Opcional. Ex: "Azul-marinho" — entra na descrição automática do produto, junto com a categoria e o nome.</InfoTooltip>}
+          >
+            <Input value={cor} onChange={(e) => setCor(e.target.value)} placeholder="ex: Azul-marinho" />
           </Field>
 
           <Field label="Coleção" data-tour="produto-colecao">

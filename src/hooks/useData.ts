@@ -1171,6 +1171,9 @@ export interface NovaLinhaInsumoProduto {
 
 export interface NovoProdutoCompleto {
   nome: string;
+  codigo: string | null;
+  cor: string | null;
+  descricao: string | null;
   categoriaProdutoId: string | null;
   colecaoId: string | null;
   quantidadeProduzida: number;
@@ -1188,6 +1191,9 @@ export function useCreateProdutoCompleto() {
         .from("produtos")
         .insert({
           nome: input.nome,
+          codigo: input.codigo,
+          cor: input.cor,
+          descricao: input.descricao,
           categoria_produto_id: input.categoriaProdutoId,
           colecao_id: input.colecaoId,
           quantidade_produzida: input.quantidadeProduzida,

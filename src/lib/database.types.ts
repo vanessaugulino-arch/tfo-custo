@@ -453,10 +453,13 @@ export type Database = {
         Row: {
           aprovado_em: string | null
           categoria_produto_id: string | null
+          codigo: string | null
           colecao_id: string | null
+          cor: string | null
           criado_em: string
           custo_producao_interna_unitario: number | null
           custo_total_unitario: number | null
+          descricao: string | null
           id: string
           nome: string
           quantidade_produzida: number | null
@@ -466,10 +469,13 @@ export type Database = {
         Insert: {
           aprovado_em?: string | null
           categoria_produto_id?: string | null
+          codigo?: string | null
           colecao_id?: string | null
+          cor?: string | null
           criado_em?: string
           custo_producao_interna_unitario?: number | null
           custo_total_unitario?: number | null
+          descricao?: string | null
           id?: string
           nome: string
           quantidade_produzida?: number | null
@@ -479,10 +485,13 @@ export type Database = {
         Update: {
           aprovado_em?: string | null
           categoria_produto_id?: string | null
+          codigo?: string | null
           colecao_id?: string | null
+          cor?: string | null
           criado_em?: string
           custo_producao_interna_unitario?: number | null
           custo_total_unitario?: number | null
+          descricao?: string | null
           id?: string
           nome?: string
           quantidade_produzida?: number | null

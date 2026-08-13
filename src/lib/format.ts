@@ -21,6 +21,12 @@ export function labelMaterial(material: { nome: string; cor?: string | null; cod
   return label;
 }
 
+/** Descrição automática do produto: categoria + nome + cor/característica. */
+export function descricaoProduto(categoriaNome: string | null, nome: string, cor: string | null): string {
+  const partes = [categoriaNome, nome, cor].filter((p): p is string => !!p && p.trim().length > 0);
+  return partes.join(" — ");
+}
+
 export const REGIME_LABELS: Record<string, string> = {
   simples_nacional: "Simples Nacional (sem crédito)",
   lucro_presumido_real: "Lucro Presumido/Real (crédito hoje)",

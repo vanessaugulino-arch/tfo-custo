@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { Badge, Button, Card, PageTitle } from "@/components/ui";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { Tour, useTourAutoShow, type TourStep } from "@/components/Tour";
@@ -63,13 +64,36 @@ export function ColecoesScreen() {
     }
   }
 
+  function handleExportar() {
+    const linhas = produtosFiltrados.map((p) => ({
+      Código: p.codigo ?? "",
+      Descrição: p.descricao ?? "",
+      Produto: p.nome,
+      Categoria: p.categoria?.nome ?? "",
+      Coleção: p.colecao?.nome ?? "",
+      "Qtd. produzida": p.quantidade_produzida ?? "",
+      "Custo unitário": p.custo_total_unitario ?? "",
+      Status: STATUS_LABEL[p.status] ?? p.status,
+    }));
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Produtos");
+    const data = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `produtos_${data}.xlsx`);
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between gap-4">
         <PageTitle title="Coleções e simulações de custo" subtitle="Aprove os pilotos que vão para produção — a aprovação desconta o estoque previsto." />
-        <Button variant="ghost" onClick={tour.abrir}>
-          Tour desta tela
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={tour.abrir}>
+            Tour desta tela
+          </Button>
+          <Button variant="secondary" onClick={handleExportar}>
+            Exportar (.xlsx)
+          </Button>
+        </div>
       </div>
       <Tour steps={TOUR_STEPS} aberto={tour.aberto} onFechar={tour.fechar} />
 
@@ -137,6 +161,7 @@ export function ColecoesScreen() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
+              <th className="py-2 pr-4">Código</th>
               <th className="py-2 pr-4">Produto</th>
               <th className="py-2 pr-4">Categoria</th>
               <th className="py-2 pr-4">Coleção</th>
@@ -149,6 +174,7 @@ export function ColecoesScreen() {
           <tbody>
             {produtosFiltrados.map((p) => (
               <tr key={p.id} className="border-b border-border/60">
+                <td className="py-2 pr-4 text-muted-foreground">{p.codigo ?? "—"}</td>
                 <td className="py-2 pr-4">{p.nome}</td>
                 <td className="py-2 pr-4">{p.categoria?.nome ?? "—"}</td>
                 <td className="py-2 pr-4">{p.colecao?.nome ?? "—"}</td>
@@ -178,7 +204,7 @@ export function ColecoesScreen() {
             ))}
             {produtosFiltrados.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                <td colSpan={8} className="py-6 text-center text-muted-foreground">
                   Nenhum produto por aqui ainda.
                 </td>
               </tr>
