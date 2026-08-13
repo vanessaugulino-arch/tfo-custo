@@ -31,6 +31,12 @@ export function EstoqueScreen() {
   const { data: estoque = [] } = useEstoqueAtual();
   const [materialSelecionado, setMaterialSelecionado] = useState<string | undefined>(undefined);
   const { data: movimentos = [] } = useMovimentosEstoque(materialSelecionado);
+  const materialFiltrado = estoque.find((e) => e.material_id === materialSelecionado)?.material ?? null;
+
+  function verMovimentos(materialId: string) {
+    setMaterialSelecionado(materialId);
+    document.querySelector('[data-tour="estoque-movimentos"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   const ajustar = useAjusteEstoque();
   const [importAberto, setImportAberto] = useState(false);
   const tour = useTourAutoShow("estoque");
@@ -140,7 +146,7 @@ export function EstoqueScreen() {
                   {formatNumber(e.saldo_atual)}
                 </td>
                 <td className="py-2 pr-4">
-                  <button className="underline text-muted-foreground" onClick={() => setMaterialSelecionado(e.material_id)}>
+                  <button className="underline text-muted-foreground" onClick={() => verMovimentos(e.material_id)}>
                     Ver movimentos
                   </button>
                 </td>
@@ -191,7 +197,7 @@ export function EstoqueScreen() {
       <Card data-tour="estoque-movimentos">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground">
-            Movimentos {materialSelecionado ? "do material selecionado" : "(todos)"}
+            Movimentos {materialFiltrado ? <>de "{labelMaterial(materialFiltrado)}"</> : "(todos os materiais)"}
           </h2>
           {materialSelecionado && (
             <button className="text-sm underline text-muted-foreground" onClick={() => setMaterialSelecionado(undefined)}>
