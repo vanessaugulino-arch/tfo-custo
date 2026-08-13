@@ -301,6 +301,20 @@ export function OnboardingWizard({ modo = "onboarding" }: OnboardingWizardProps)
         </div>
 
         <div>
+          <SectionTitle
+            title="Iniciais da empresa (opcional)"
+            subtitle="Usadas para gerar o código automático dos seus produtos — ex: 'TFO' para The Fashion Office."
+          />
+          <input
+            value={rascunho.iniciais_empresa ?? ""}
+            onChange={(e) => atualizar("iniciais_empresa", e.target.value.toUpperCase())}
+            placeholder="Ex: TFO"
+            maxLength={6}
+            className="mt-4 w-full max-w-[10rem] rounded-md border border-border bg-card px-4 py-3 text-sm outline-none focus:border-secondary focus:ring-1 focus:ring-secondary"
+          />
+        </div>
+
+        <div>
           <SectionTitle title="Qual é o segmento principal?" subtitle="Pode selecionar mais de um — ex: Vestuário Feminino e Calçados Femininos." />
           <div className="mt-4 flex flex-col gap-5">
             {SEGMENTOS.map((s) => (

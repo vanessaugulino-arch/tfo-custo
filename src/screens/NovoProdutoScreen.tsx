@@ -108,6 +108,7 @@ export function NovoProdutoScreen() {
   const [colecaoId, setColecaoId] = useState<string | null>(null);
   const [novaColecao, setNovaColecao] = useState(false);
   const [colecaoNome, setColecaoNome] = useState("");
+  const [colecaoAno, setColecaoAno] = useState("");
   const [quantidadeProduzida, setQuantidadeProduzida] = useState("");
   const quantidadeProduzidaNum = Number(quantidadeProduzida) || 0;
   const [erro, setErro] = useState<string | null>(null);
@@ -196,10 +197,11 @@ export function NovoProdutoScreen() {
 
   async function handleCriarColecao() {
     if (!colecaoNome.trim()) return;
-    const nova = await createColecao.mutateAsync({ nome: colecaoNome.trim() });
+    const nova = await createColecao.mutateAsync({ nome: colecaoNome.trim(), ano: Number(colecaoAno) || null });
     setColecaoId(nova.id);
     setNovaColecao(false);
     setColecaoNome("");
+    setColecaoAno("");
   }
 
   async function addServicoLinha() {
@@ -433,6 +435,12 @@ export function NovoProdutoScreen() {
             ) : (
               <div className="flex flex-col gap-2 rounded-md border border-border p-3">
                 <Input placeholder="Nome da coleção" value={colecaoNome} onChange={(e) => setColecaoNome(e.target.value)} />
+                <Input
+                  type="number"
+                  placeholder="Ano da coleção (ex: 2026)"
+                  value={colecaoAno}
+                  onChange={(e) => setColecaoAno(e.target.value)}
+                />
                 <div className="flex gap-2">
                   <Button type="button" onClick={handleCriarColecao} disabled={createColecao.isPending}>
                     Criar coleção

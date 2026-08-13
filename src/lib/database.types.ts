@@ -55,18 +55,21 @@ export type Database = {
       }
       categorias_produto: {
         Row: {
+          codigo_numero: number | null
           criado_em: string
           id: string
           nome: string
           user_id: string
         }
         Insert: {
+          codigo_numero?: number | null
           criado_em?: string
           id?: string
           nome: string
           user_id?: string
         }
         Update: {
+          codigo_numero?: number | null
           criado_em?: string
           id?: string
           nome?: string
@@ -76,28 +79,34 @@ export type Database = {
       }
       colecoes: {
         Row: {
+          ano: number | null
           criado_em: string
           fechada_em: string | null
           id: string
           nome: string
+          numero: number | null
           periodo_fim: string | null
           periodo_inicio: string | null
           user_id: string
         }
         Insert: {
+          ano?: number | null
           criado_em?: string
           fechada_em?: string | null
           id?: string
           nome: string
+          numero?: number | null
           periodo_fim?: string | null
           periodo_inicio?: string | null
           user_id?: string
         }
         Update: {
+          ano?: number | null
           criado_em?: string
           fechada_em?: string | null
           id?: string
           nome?: string
+          numero?: number | null
           periodo_fim?: string | null
           periodo_inicio?: string | null
           user_id?: string
@@ -274,6 +283,7 @@ export type Database = {
           estagio: string | null
           faturamento_faixa: string | null
           id: string
+          iniciais_empresa: string | null
           modelo_producao: string | null
           nome_marca: string | null
           onboarding_concluido: boolean
@@ -289,6 +299,7 @@ export type Database = {
           estagio?: string | null
           faturamento_faixa?: string | null
           id?: string
+          iniciais_empresa?: string | null
           modelo_producao?: string | null
           nome_marca?: string | null
           onboarding_concluido?: boolean
@@ -304,6 +315,7 @@ export type Database = {
           estagio?: string | null
           faturamento_faixa?: string | null
           id?: string
+          iniciais_empresa?: string | null
           modelo_producao?: string | null
           nome_marca?: string | null
           onboarding_concluido?: boolean
