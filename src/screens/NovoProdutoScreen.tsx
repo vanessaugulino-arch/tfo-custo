@@ -403,8 +403,9 @@ export function NovoProdutoScreen() {
             label="Código"
             hint={
               <InfoTooltip>
-                Opcional. Deixe em branco para o sistema gerar um código automático (ex: PRD-0001), ou digite o código
-                que você já usa no seu ERP/planilha.
+                Opcional. Deixe em branco para o sistema gerar um código automático — iniciais da empresa + ano da
+                coleção + nº da coleção + nº da categoria + sequência (ex: TFO261205) — ou digite o código que você já
+                usa no seu ERP/planilha. Peças que não usam coleção ou categoria entram como "99" no lugar.
               </InfoTooltip>
             }
           >
@@ -674,12 +675,18 @@ export function NovoProdutoScreen() {
             coleção.
           </div>
         )}
-        {draftPooled && !draftColecaoConflita && !colecaoId && (
+        {draftPooled && !draftColecaoConflita && draftServico && !draftServico.colecao_id && (
+          <div className="mb-4 text-sm text-destructive">
+            Este serviço ainda não tem uma coleção nem um valor combinado definidos — edite o cadastro dele na tela de
+            Serviços para informar os dois.
+          </div>
+        )}
+        {draftPooled && !draftColecaoConflita && draftServico?.colecao_id && !colecaoId && (
           <div className="mb-4 text-sm text-destructive">
             Selecione a coleção do produto acima antes de adicionar este serviço.
           </div>
         )}
-        {draftPooled && !draftColecaoConflita && colecaoId && !engajamentoExistente && (
+        {draftPooled && !draftColecaoConflita && draftServico?.colecao_id && colecaoId && !engajamentoExistente && (
           <div className="mb-4 text-sm text-destructive">
             Este serviço ainda não tem um valor combinado definido — edite o cadastro dele na tela de Serviços para
             informar o valor.

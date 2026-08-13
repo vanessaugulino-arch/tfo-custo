@@ -32,7 +32,7 @@ import {
   type ModeloPrecificacaoServico,
   type ServicoFornecedorCompleto,
 } from "@/hooks/useData";
-import { findOrCreateCategoria, findOrCreateFornecedor, findOrCreateServico, parseNumeroPtBr } from "@/lib/importHelpers";
+import { findOrCreateCategoria, findOrCreateColecao, findOrCreateFornecedor, findOrCreateServico, parseNumeroPtBr } from "@/lib/importHelpers";
 import { MODELO_SERVICOS } from "@/lib/importFields";
 import { formatBRL, formatNumber, labelMaterial, MODELO_PRECIFICACAO_EXPLICACAO, MODELO_PRECIFICACAO_LABELS } from "@/lib/format";
 
@@ -175,16 +175,18 @@ export function ServicosScreen() {
       const row = linhas[i];
       try {
         if (!row.fornecedor?.trim() || !row.servico?.trim()) throw new Error("fornecedor ou serviço vazio");
+        if (!row.colecao?.trim()) throw new Error("coleção vazia — todo serviço precisa pertencer a uma coleção");
         const modeloRow = row.modelo_precificacao?.trim().toLowerCase();
         if (!MODELOS_VALIDOS.has(modeloRow))
           throw new Error(
-            "modelo de precificação inválido para importação em lote (use peca_produzida ou tempo — 'colecao', 'peca_desenvolvida' e 'metro_corrido' exigem escolher a coleção e/ou o valor combinado manualmente)",
+            "modelo de precificação inválido para importação em lote (use peca_produzida ou tempo — 'colecao', 'peca_desenvolvida' e 'metro_corrido' exigem escolher o valor combinado manualmente)",
           );
         const custoPorMinuto = modeloRow === "tempo" ? parseNumeroPtBr(row.custo_por_minuto) : null;
         if (modeloRow === "tempo" && !(Number(custoPorMinuto) > 0)) throw new Error("custo por minuto obrigatório para o modelo 'tempo'");
 
         const fornecedorId = await findOrCreateFornecedor(row.fornecedor);
         const servicoId = await findOrCreateServico(row.servico);
+        const colecaoIdRow = await findOrCreateColecao(row.colecao);
         const nomesCategorias = (row.categorias ?? "").split(",").map((s) => s.trim()).filter(Boolean);
         const categoriaIdsRow: string[] = [];
         for (const nome of nomesCategorias) categoriaIdsRow.push(await findOrCreateCategoria(nome));
@@ -194,7 +196,7 @@ export function ServicosScreen() {
           servicoId,
           modeloPrecificacao: modeloRow as ModeloPrecificacaoServico,
           custoPorMinuto,
-          colecaoId: null,
+          colecaoId: colecaoIdRow,
           beneficiamento: false,
           todasCategorias: false,
           categoriaIds: categoriaIdsRow,
@@ -318,45 +320,78 @@ export function ServicosScreen() {
       categoriaIds: form.todasCategorias ? categorias.map((c) => c.id) : form.categoriaIds,
     };
 
-    if (isBeneficiamento) {
-      const materialResultanteAtual = materiais.find((m) => m.id === benef.materialResultanteId);
-      if (benef.corResultante.trim() !== (materialResultanteAtual?.cor ?? "")) {
-        await updateMaterial.mutateAsync({ id: benef.materialResultanteId!, cor: benef.corResultante.trim() });
-      }
-    }
-
-    if (editandoId) {
-      await updateServicoFornecedor.mutateAsync({ id: editandoId, ...payload });
-      if (isPooled && !bloqueiaCampoCusto) {
-        if (editandoEngajamentoId) {
-          await atualizarValorEngajamento.mutateAsync({
-            id: editandoEngajamentoId,
-            valorTotal: Number(form.valorTotal),
-            colecaoId: form.colecaoId!,
-          });
-        } else {
-          await getOrCreateEngajamento.mutateAsync({
-            servicoFornecedorId: editandoId,
-            colecaoId: form.colecaoId!,
-            valorTotalSeNovo: Number(form.valorTotal),
-          });
+    try {
+      if (isBeneficiamento) {
+        const materialResultanteAtual = materiais.find((m) => m.id === benef.materialResultanteId);
+        if (benef.corResultante.trim() !== (materialResultanteAtual?.cor ?? "")) {
+          await updateMaterial.mutateAsync({ id: benef.materialResultanteId!, cor: benef.corResultante.trim() });
         }
       }
+
+      if (editandoId) {
+        const tarefas: Promise<unknown>[] = [updateServicoFornecedor.mutateAsync({ id: editandoId, ...payload })];
+        if (isPooled && !bloqueiaCampoCusto) {
+          tarefas.push(
+            editandoEngajamentoId
+              ? atualizarValorEngajamento.mutateAsync({
+                  id: editandoEngajamentoId,
+                  valorTotal: Number(form.valorTotal),
+                  colecaoId: form.colecaoId!,
+                })
+              : getOrCreateEngajamento.mutateAsync({
+                  servicoFornecedorId: editandoId,
+                  colecaoId: form.colecaoId!,
+                  valorTotalSeNovo: Number(form.valorTotal),
+                }),
+          );
+        }
+        if (isBeneficiamento && compraOrigem) {
+          tarefas.push(
+            editandoBeneficiamentoId
+              ? updateBeneficiamento.mutateAsync({
+                  id: editandoBeneficiamentoId,
+                  materialOrigemId: benef.materialOrigemId!,
+                  compraInsumoOrigemId: compraOrigem.id!,
+                  materialResultanteId: benef.materialResultanteId!,
+                  quantidadeBeneficiada: quantidadeBenefNum,
+                  custoOrigemUnitario,
+                  custoBeneficiamento: custoBenefNum,
+                  dataCompra: benef.data,
+                })
+              : aplicarBeneficiamento.mutateAsync({
+                  servicoFornecedorId: editandoId,
+                  fornecedorId: form.fornecedorId,
+                  materialOrigemId: benef.materialOrigemId!,
+                  compraInsumoOrigemId: compraOrigem.id!,
+                  materialResultanteId: benef.materialResultanteId!,
+                  quantidadeBeneficiada: quantidadeBenefNum,
+                  custoOrigemUnitario,
+                  custoBeneficiamento: custoBenefNum,
+                  regimeTributario: compraOrigem.regime_tributario ?? "simples_nacional",
+                  dataCompra: benef.data,
+                }),
+          );
+        }
+        await Promise.all(tarefas);
+        cancelarEdicao();
+        return;
+      }
+
+      const criado = await createServicoFornecedor.mutateAsync(payload);
+      const tarefas: Promise<unknown>[] = [];
+      if (isPooled) {
+        tarefas.push(
+          getOrCreateEngajamento.mutateAsync({
+            servicoFornecedorId: criado.id,
+            colecaoId: form.colecaoId!,
+            valorTotalSeNovo: Number(form.valorTotal),
+          }),
+        );
+      }
       if (isBeneficiamento && compraOrigem) {
-        if (editandoBeneficiamentoId) {
-          await updateBeneficiamento.mutateAsync({
-            id: editandoBeneficiamentoId,
-            materialOrigemId: benef.materialOrigemId!,
-            compraInsumoOrigemId: compraOrigem.id!,
-            materialResultanteId: benef.materialResultanteId!,
-            quantidadeBeneficiada: quantidadeBenefNum,
-            custoOrigemUnitario,
-            custoBeneficiamento: custoBenefNum,
-            dataCompra: benef.data,
-          });
-        } else {
-          await aplicarBeneficiamento.mutateAsync({
-            servicoFornecedorId: editandoId,
+        tarefas.push(
+          aplicarBeneficiamento.mutateAsync({
+            servicoFornecedorId: criado.id,
             fornecedorId: form.fornecedorId,
             materialOrigemId: benef.materialOrigemId!,
             compraInsumoOrigemId: compraOrigem.id!,
@@ -366,37 +401,15 @@ export function ServicosScreen() {
             custoBeneficiamento: custoBenefNum,
             regimeTributario: compraOrigem.regime_tributario ?? "simples_nacional",
             dataCompra: benef.data,
-          });
-        }
+          }),
+        );
       }
-      cancelarEdicao();
-      return;
+      await Promise.all(tarefas);
+      setForm(FORM_VAZIO);
+      setBenef(beneficiamentoVazio());
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Não foi possível salvar este serviço.");
     }
-
-    const criado = await createServicoFornecedor.mutateAsync(payload);
-    if (isPooled) {
-      await getOrCreateEngajamento.mutateAsync({
-        servicoFornecedorId: criado.id,
-        colecaoId: form.colecaoId!,
-        valorTotalSeNovo: Number(form.valorTotal),
-      });
-    }
-    if (isBeneficiamento && compraOrigem) {
-      await aplicarBeneficiamento.mutateAsync({
-        servicoFornecedorId: criado.id,
-        fornecedorId: form.fornecedorId,
-        materialOrigemId: benef.materialOrigemId!,
-        compraInsumoOrigemId: compraOrigem.id!,
-        materialResultanteId: benef.materialResultanteId!,
-        quantidadeBeneficiada: quantidadeBenefNum,
-        custoOrigemUnitario,
-        custoBeneficiamento: custoBenefNum,
-        regimeTributario: compraOrigem.regime_tributario ?? "simples_nacional",
-        dataCompra: benef.data,
-      });
-    }
-    setForm(FORM_VAZIO);
-    setBenef(beneficiamentoVazio());
   }
 
   return (

@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 
-async function findOrCreate(table: "fornecedores" | "materiais" | "servicos" | "categorias_produto", nome: string): Promise<string> {
+async function findOrCreate(table: "fornecedores" | "materiais" | "servicos" | "categorias_produto" | "colecoes", nome: string): Promise<string> {
   const nomeLimpo = nome.trim();
   const { data: existente, error: erroBusca } = await supabase
     .from(table)
@@ -18,6 +18,7 @@ async function findOrCreate(table: "fornecedores" | "materiais" | "servicos" | "
 export const findOrCreateFornecedor = (nome: string) => findOrCreate("fornecedores", nome);
 export const findOrCreateServico = (nome: string) => findOrCreate("servicos", nome);
 export const findOrCreateCategoria = (nome: string) => findOrCreate("categorias_produto", nome);
+export const findOrCreateColecao = (nome: string) => findOrCreate("colecoes", nome);
 
 /** Cor faz parte da identidade do material — "algodão cru" verde e cinza são materiais diferentes. */
 export async function findOrCreateMaterial(nome: string, cor?: string): Promise<string> {
