@@ -36,7 +36,7 @@ export function LoginScreen() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="flex justify-center">
-            <BrandLogo size="lg" />
+            <BrandLogo size="lg" theme="light" />
           </div>
           <p className="text-sm text-muted-foreground mt-2">Custo de produto, do insumo ao preço.</p>
         </div>

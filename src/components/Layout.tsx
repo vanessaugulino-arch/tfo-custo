@@ -26,7 +26,7 @@ export function Layout() {
     <div className="min-h-screen flex">
       <aside className="w-60 shrink-0 bg-sidebar text-sidebar-foreground p-4 flex flex-col">
         <div className="mb-6">
-          <BrandLogo size="sm" />
+          <BrandLogo size="sm" theme="dark" />
           <div className="text-xs text-sidebar-foreground/60 mt-1">Custo de produto</div>
         </div>
         <nav className="flex flex-col gap-1 flex-1">
