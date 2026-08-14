@@ -4,6 +4,8 @@ import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
 import { usePerfilNegocio } from "@/hooks/useData";
 import { LoginScreen } from "@/screens/LoginScreen";
+import { RedefinirSenhaScreen } from "@/screens/RedefinirSenhaScreen";
+import { AdminUsuariosScreen } from "@/screens/admin/AdminUsuariosScreen";
 import { OnboardingWizard } from "@/screens/onboarding/OnboardingWizard";
 import { InicioScreen } from "@/screens/InicioScreen";
 import { InsumosScreen } from "@/screens/InsumosScreen";
@@ -31,6 +33,8 @@ export default function App() {
     conteudo = <div className="min-h-screen flex items-center justify-center text-muted-foreground text-sm">Carregando...</div>;
   } else if (!user) {
     conteudo = <LoginScreen />;
+  } else if (user.user_metadata?.senha_temporaria) {
+    conteudo = <RedefinirSenhaScreen />;
   } else if (!perfil?.onboarding_concluido) {
     conteudo = <OnboardingWizard />;
   } else {
@@ -47,6 +51,7 @@ export default function App() {
           <Route path="/estoque" element={<EstoqueScreen />} />
           <Route path="/producao-interna" element={<ProducaoInternaScreen />} />
           <Route path="/relatorios" element={<RelatoriosScreen />} />
+          <Route path="/admin/usuarios" element={<AdminUsuariosScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
